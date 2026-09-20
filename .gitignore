@@ -28,3 +28,6 @@ dist-ssr
 
 # Nix flake cache
 .direnv/
+
+.env
+.env.development
