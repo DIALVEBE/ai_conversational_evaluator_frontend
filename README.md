@@ -16,17 +16,17 @@ For development
 deno task dev
 ```
 
-# Features
+## Features
 
 As a teacher/administrator you can create verbal tests with any number of topics for the conversational AI to evaluate. With the same test you can create any number of temporal links to assign for every student and give you the metrics and statistics of their results in the test, either of a specific student or all of them.
 
-# TODO
+## TODO
 
 - Remove specific topics from list
 - Improve UI
 - Firefox has problems with using WebRTC on unstable connections and localhost (development environments). Until I keep using the Tanstack AI library the problem will persist, because I need to define a STUN server explicitly
 
-# Links
+## Links
 
 - OpenAI Realtime API reference: https://developers.openai.com/api/reference/typescript/resources/realtime
 
