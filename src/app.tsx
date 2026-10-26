@@ -7,9 +7,44 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import academyImage from "./assets/virtualchallenge-collage.png";
 import sessionImage from "./assets/virtualchallenge-session.png";
 import tutorImage from "./assets/virtualchallenge-tutor.png";
-import { authClient } from "./lib/auth-client";
+import { apiBaseUrl, authClient } from "./lib/auth-client";
 
 type AppRole = "admin" | "docente" | "estudiante";
+type AdminSection = "usuarios" | "programas" | "espacios" | "asignaciones" | "historico";
+type PageMetadata = {
+  page: number;
+  pageSize: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+const ADMIN_PAGE_SIZE = 25;
+const EMPTY_PAGE: PageMetadata = { page: 1, pageSize: ADMIN_PAGE_SIZE, totalItems: 0, totalPages: 1 };
+
+type ProgramOption = { id: string; name: string };
+type SearchOption = { id: string; label: string };
+type AdminUserFilters = { search: string; role: string; active: string };
+type AdminCatalogFilters = { search: string; active: string };
+type AdminSpaceFilters = AdminCatalogFilters & { programId: string };
+type AdminAssignmentFilters = { search: string; programId: string; spaceId: string; relation: string };
+
+function EyeIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.6" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="m3 3 18 18M10.6 6.2A10.8 10.8 0 0 1 12 6c6.1 0 9.5 6 9.5 6a15 15 0 0 1-3.1 3.7M6.2 6.3C3.8 8 2.5 12 2.5 12s3.4 6 9.5 6a10 10 0 0 0 3.1-.5" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </svg>
+  );
+}
 
 type AppUser = {
   id: string;
@@ -284,7 +319,7 @@ type ConversationToken = RealtimeToken & {
 };
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_BACKEND_URL,
+  baseURL: apiBaseUrl,
   withCredentials: true,
 });
 
@@ -357,9 +392,11 @@ export function App() {
         <InstitutionalStrip />
         <SessionHeader user={appUser} onSignOut={session.refetch} />
         <InitialPasswordScreen
+          email={appUser.email}
           onComplete={async () => {
-            const response = await api.get<{ user: AppUser }>("/me");
-            setAppUser(response.data.user);
+            await authClient.signOut();
+            await session.refetch();
+            setAppUser(null);
           }}
         />
         <AppFooter />
@@ -382,6 +419,7 @@ function LoginScreen(props: {
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -446,13 +484,24 @@ function LoginScreen(props: {
 
             <label>
               Contraseña
-              <input
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                type="password"
-                autoComplete="current-password"
-                required
-              />
+              <span className="password-field">
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  className="password-visibility"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  type="button"
+                >
+                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </span>
             </label>
 
             {error ? <p className="error-text">{error}</p> : null}
@@ -469,11 +518,18 @@ function LoginScreen(props: {
   );
 }
 
-function InitialPasswordScreen(props: { onComplete: () => Promise<void> }) {
+function InitialPasswordScreen(props: {
+  email: string;
+  onComplete: () => Promise<void>;
+}) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -488,7 +544,12 @@ function InitialPasswordScreen(props: { onComplete: () => Promise<void> }) {
     setIsSubmitting(true);
     try {
       await api.post("/me/initial-password", { currentPassword, newPassword });
-      await props.onComplete();
+      setSuccess(true);
+      window.setTimeout(() => {
+        void props.onComplete().catch(() => {
+          setError("La contraseña se actualizó, pero no fue posible cerrar la sesión. Sal e ingresa nuevamente.");
+        });
+      }, 1400);
     } catch {
       setError("No fue posible actualizar la contraseña. Verifica la contraseña temporal e inténtalo de nuevo.");
     } finally {
@@ -504,42 +565,83 @@ function InitialPasswordScreen(props: { onComplete: () => Promise<void> }) {
         Tu número de documento es la contraseña temporal. Reemplázala ahora por una
         contraseña nueva de al menos 12 caracteres antes de continuar.
       </p>
-      <form className="form-stack" onSubmit={onSubmit}>
+      <p className="password-account">
+        Cuenta autenticada: <strong>{props.email}</strong>
+      </p>
+      <form className="form-stack" autoComplete="off" onSubmit={onSubmit}>
         <label>
           Contraseña temporal
-          <input
-            type="password"
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            autoComplete="current-password"
-            required
-          />
+          <span className="password-field">
+            <input
+              type={showCurrentPassword ? "text" : "password"}
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              autoComplete="off"
+              required
+            />
+            <button
+              aria-label={showCurrentPassword ? "Ocultar contraseña temporal" : "Mostrar contraseña temporal"}
+              className="password-visibility"
+              onClick={() => setShowCurrentPassword((visible) => !visible)}
+              title={showCurrentPassword ? "Ocultar contraseña temporal" : "Mostrar contraseña temporal"}
+              type="button"
+            >
+              {showCurrentPassword ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </span>
         </label>
         <label>
           Nueva contraseña
-          <input
-            type="password"
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            autoComplete="new-password"
-            minLength={12}
-            required
-          />
+          <span className="password-field">
+            <input
+              type={showNewPassword ? "text" : "password"}
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={12}
+              required
+            />
+            <button
+              aria-label={showNewPassword ? "Ocultar nueva contraseña" : "Mostrar nueva contraseña"}
+              className="password-visibility"
+              onClick={() => setShowNewPassword((visible) => !visible)}
+              title={showNewPassword ? "Ocultar nueva contraseña" : "Mostrar nueva contraseña"}
+              type="button"
+            >
+              {showNewPassword ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </span>
         </label>
         <label>
           Confirmar nueva contraseña
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            autoComplete="new-password"
-            minLength={12}
-            required
-          />
+          <span className="password-field">
+            <input
+              type={showConfirmPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              autoComplete="new-password"
+              minLength={12}
+              required
+            />
+            <button
+              aria-label={showConfirmPassword ? "Ocultar confirmación" : "Mostrar confirmación"}
+              className="password-visibility"
+              onClick={() => setShowConfirmPassword((visible) => !visible)}
+              title={showConfirmPassword ? "Ocultar confirmación" : "Mostrar confirmación"}
+              type="button"
+            >
+              {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </span>
         </label>
         {error ? <p className="error-text">{error}</p> : null}
-        <button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Actualizando..." : "Guardar contraseña"}
+        {success ? (
+          <p className="success-text" role="status">
+            Contraseña actualizada. Te redirigiremos al inicio de sesión.
+          </p>
+        ) : null}
+        <button type="submit" disabled={isSubmitting || success}>
+          {isSubmitting ? "Actualizando..." : success ? "Actualizada" : "Guardar contraseña"}
         </button>
       </form>
     </section>
@@ -606,9 +708,7 @@ function RoleHome(props: {
 function AdminHome(props: {
   user: AppUser | null;
 }) {
-  const [activeSection, setActiveSection] = useState<
-    "usuarios" | "programas" | "espacios" | "asignaciones" | "historico"
-  >("usuarios");
+  const [activeSection, setActiveSection] = useState<AdminSection>("usuarios");
   const [summary, setSummary] = useState<AdminSummary>({
     users: 0,
     programs: 0,
@@ -616,52 +716,106 @@ function AdminHome(props: {
     assignments: 0,
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [usersPagination, setUsersPagination] = useState(EMPTY_PAGE);
+  const [usersPage, setUsersPage] = useState(1);
+  const [userFilters, setUserFilters] = useState<AdminUserFilters>({ search: "", role: "", active: "" });
   const [programs, setPrograms] = useState<AcademicProgram[]>([]);
+  const [programsPagination, setProgramsPagination] = useState(EMPTY_PAGE);
+  const [programsPage, setProgramsPage] = useState(1);
+  const [programFilters, setProgramFilters] = useState<AdminCatalogFilters>({ search: "", active: "" });
   const [academicSpaces, setAcademicSpaces] = useState<AcademicSpace[]>([]);
-  const [assignments, setAssignments] = useState<AdminAssignment[]>([]);
+  const [programOptions, setProgramOptions] = useState<ProgramOption[]>([]);
+  const [spacesPagination, setSpacesPagination] = useState(EMPTY_PAGE);
+  const [spacesPage, setSpacesPage] = useState(1);
+  const [spaceFilters, setSpaceFilters] = useState<AdminSpaceFilters>({ search: "", active: "", programId: "" });
+  const [programAssignments, setProgramAssignments] = useState<AdminAssignment[]>([]);
+  const [programAssignmentsPagination, setProgramAssignmentsPagination] = useState(EMPTY_PAGE);
+  const [programAssignmentsPage, setProgramAssignmentsPage] = useState(1);
+  const [programAssignmentFilters, setProgramAssignmentFilters] = useState<AdminAssignmentFilters>({ search: "", programId: "", spaceId: "", relation: "" });
+  const [spaceAssignments, setSpaceAssignments] = useState<AdminAssignment[]>([]);
+  const [spaceAssignmentsPagination, setSpaceAssignmentsPagination] = useState(EMPTY_PAGE);
+  const [spaceAssignmentsPage, setSpaceAssignmentsPage] = useState(1);
+  const [spaceAssignmentFilters, setSpaceAssignmentFilters] = useState<AdminAssignmentFilters>({ search: "", programId: "", spaceId: "", relation: "" });
   const [adminError, setAdminError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [loadedSections, setLoadedSections] = useState<Set<AdminSection>>(() => new Set());
   const [confirmation, setConfirmation] = useState<ConfirmationState>(null);
 
   function showError(message: string) {
     setAdminError(message);
   }
 
-  async function loadAdminData() {
+  const loadAdminData = useCallback(async () => {
     setAdminError("");
+    setIsLoading(true);
 
     try {
-      const [
-        summaryResponse,
-        usersResponse,
-        programsResponse,
-        spacesResponse,
-        assignmentsResponse,
-      ] = await Promise.all([
-        api.get<{ summary: AdminSummary }>("/admin/summary"),
-        api.get<{ users: AdminUser[] }>("/admin/users"),
-        api.get<{ programs: AcademicProgram[] }>("/admin/programs"),
-        api.get<{ academicSpaces: AcademicSpace[] }>("/admin/academic-spaces"),
-        api.get<{ assignments: AdminAssignment[] }>("/admin/assignments"),
-      ]);
-
+      const summaryResponse = await api.get<{ summary: AdminSummary }>("/admin/summary");
       setSummary(summaryResponse.data.summary);
-      setUsers(usersResponse.data.users);
-      setPrograms(programsResponse.data.programs);
-      setAcademicSpaces(spacesResponse.data.academicSpaces);
-      setAssignments(assignmentsResponse.data.assignments);
+
+      if (activeSection === "usuarios") {
+        const response = await api.get<{ users: AdminUser[]; pagination: PageMetadata }>(
+          "/admin/users",
+          { params: { ...userFilters, page: usersPage, pageSize: ADMIN_PAGE_SIZE } },
+        );
+        setUsers(response.data.users);
+        setUsersPagination(response.data.pagination);
+        setUsersPage(response.data.pagination.page);
+      } else if (activeSection === "programas") {
+        const response = await api.get<{ programs: AcademicProgram[]; pagination: PageMetadata }>(
+          "/admin/programs",
+          { params: { ...programFilters, page: programsPage, pageSize: ADMIN_PAGE_SIZE } },
+        );
+        setPrograms(response.data.programs);
+        setProgramsPagination(response.data.pagination);
+        setProgramsPage(response.data.pagination.page);
+      } else if (activeSection === "espacios") {
+        const [spacesResponse, programsResponse] = await Promise.all([
+          api.get<{ academicSpaces: AcademicSpace[]; pagination: PageMetadata }>(
+            "/admin/academic-spaces",
+            { params: { ...spaceFilters, page: spacesPage, pageSize: ADMIN_PAGE_SIZE } },
+          ),
+          api.get<{ programs: ProgramOption[] }>("/admin/programs/options"),
+        ]);
+        setAcademicSpaces(spacesResponse.data.academicSpaces);
+        setSpacesPagination(spacesResponse.data.pagination);
+        setSpacesPage(spacesResponse.data.pagination.page);
+        setProgramOptions(programsResponse.data.programs);
+      } else if (activeSection === "asignaciones") {
+        const [programResponse, spaceResponse, programsResponse] = await Promise.all([
+          api.get<{ assignments: AdminAssignment[]; pagination: PageMetadata }>(
+            "/admin/assignments",
+            { params: { scope: "program", ...programAssignmentFilters, page: programAssignmentsPage, pageSize: ADMIN_PAGE_SIZE } },
+          ),
+          api.get<{ assignments: AdminAssignment[]; pagination: PageMetadata }>(
+            "/admin/assignments",
+            { params: { scope: "academic_space", ...spaceAssignmentFilters, page: spaceAssignmentsPage, pageSize: ADMIN_PAGE_SIZE } },
+          ),
+          api.get<{ programs: ProgramOption[] }>("/admin/programs/options"),
+        ]);
+        setProgramAssignments(programResponse.data.assignments);
+        setProgramAssignmentsPagination(programResponse.data.pagination);
+        setProgramAssignmentsPage(programResponse.data.pagination.page);
+        setSpaceAssignments(spaceResponse.data.assignments);
+        setSpaceAssignmentsPagination(spaceResponse.data.pagination);
+        setSpaceAssignmentsPage(spaceResponse.data.pagination.page);
+        setProgramOptions(programsResponse.data.programs);
+      }
+      setLoadedSections((current) => new Set(current).add(activeSection));
     } catch {
       setAdminError("No fue posible cargar la información administrativa.");
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [activeSection, usersPage, programsPage, spacesPage, programAssignmentsPage, spaceAssignmentsPage, userFilters, programFilters, spaceFilters, programAssignmentFilters, spaceAssignmentFilters]);
 
   useEffect(() => {
     void loadAdminData();
-    const refreshTimer = window.setInterval(() => void loadAdminData(), 30_000);
+    const refreshTimer = window.setInterval(() => {
+      if (activeSection !== "historico") void loadAdminData();
+    }, 30_000);
     return () => window.clearInterval(refreshTimer);
-  }, []);
+  }, [loadAdminData, activeSection]);
 
   const adminSteps: Array<{
     id: typeof activeSection;
@@ -674,28 +828,28 @@ function AdminHome(props: {
       id: "usuarios",
       number: "01",
       label: "Usuarios",
-      summary: `${users.length} perfiles`,
+      summary: `${summary.users} perfiles`,
       description: "Crea y activa cuentas por rol.",
     },
     {
       id: "programas",
       number: "02",
       label: "Programas",
-      summary: `${programs.filter((program) => program.isActive).length} activos`,
+      summary: `${summary.programs} programas`,
       description: "Define la estructura académica base.",
     },
     {
       id: "espacios",
       number: "03",
       label: "Espacios",
-      summary: `${academicSpaces.length} espacios`,
+      summary: `${summary.spaces} espacios`,
       description: "Conecta materias con programas.",
     },
     {
       id: "asignaciones",
       number: "04",
       label: "Asignaciones",
-      summary: `${assignments.length} vínculos`,
+      summary: `${summary.assignments} vínculos`,
       description: "Relaciona docentes y estudiantes.",
     },
     {
@@ -759,47 +913,69 @@ function AdminHome(props: {
       </section>
 
       {adminError ? <p className="error-text">{adminError}</p> : null}
-      {isLoading ? <section className="panel"><p>Cargando datos administrativos...</p></section> : null}
-      {!isLoading && activeSection === "usuarios" ? (
+      {isLoading && !loadedSections.has(activeSection) ? <section className="panel"><p>Cargando sección...</p></section> : null}
+      {loadedSections.has(activeSection) && activeSection === "usuarios" ? (
         <AdminUsersPanel
           users={users}
+          pagination={usersPagination}
+          isLoading={isLoading}
+          onPageChange={setUsersPage}
+          filters={userFilters}
+          onFilter={(filters) => { setUserFilters(filters); setUsersPage(1); }}
+          currentUserId={props.user?.id ?? ""}
           onChanged={loadAdminData}
           confirm={setConfirmation}
           showError={showError}
         />
       ) : null}
-      {!isLoading && activeSection === "programas" ? (
+      {loadedSections.has(activeSection) && activeSection === "programas" ? (
         <AdminProgramsPanel
           programs={programs}
+          pagination={programsPagination}
+          isLoading={isLoading}
+          onPageChange={setProgramsPage}
+          filters={programFilters}
+          onFilter={(filters) => { setProgramFilters(filters); setProgramsPage(1); }}
           onChanged={loadAdminData}
           confirm={setConfirmation}
           showError={showError}
         />
       ) : null}
-      {!isLoading && activeSection === "espacios" ? (
+      {loadedSections.has(activeSection) && activeSection === "espacios" ? (
         <AdminSpacesPanel
           academicSpaces={academicSpaces}
-          programs={programs}
-          users={users}
+          programs={programOptions}
+          pagination={spacesPagination}
+          isLoading={isLoading}
+          onPageChange={setSpacesPage}
+          filters={spaceFilters}
+          onFilter={(filters) => { setSpaceFilters(filters); setSpacesPage(1); }}
           onChanged={loadAdminData}
           confirm={setConfirmation}
           showError={showError}
         />
       ) : null}
-      {!isLoading && activeSection === "asignaciones" ? (
+      {loadedSections.has(activeSection) && activeSection === "asignaciones" ? (
         <AdminAssignmentsPanel
-          assignments={assignments}
+          programAssignments={programAssignments}
+          programPagination={programAssignmentsPagination}
+          onProgramPageChange={setProgramAssignmentsPage}
+          spaceAssignments={spaceAssignments}
+          spacePagination={spaceAssignmentsPagination}
+          onSpacePageChange={setSpaceAssignmentsPage}
+          programOptions={programOptions}
+          programFilters={programAssignmentFilters}
+          onProgramFilter={(filters) => { setProgramAssignmentFilters(filters); setProgramAssignmentsPage(1); }}
+          spaceFilters={spaceAssignmentFilters}
+          onSpaceFilter={(filters) => { setSpaceAssignmentFilters(filters); setSpaceAssignmentsPage(1); }}
+          isLoading={isLoading}
           onChanged={loadAdminData}
           confirm={setConfirmation}
           showError={showError}
         />
       ) : null}
-      {!isLoading && activeSection === "historico" ? (
-        <AdminResultsPanel
-          programs={programs}
-          academicSpaces={academicSpaces}
-          users={users}
-        />
+      {activeSection === "historico" ? (
+        <AdminResultsPanel />
       ) : null}
 
       {confirmation ? (
@@ -814,6 +990,12 @@ function AdminHome(props: {
 
 function AdminUsersPanel(props: {
   users: AdminUser[];
+  pagination: PageMetadata;
+  isLoading: boolean;
+  onPageChange: (page: number) => void;
+  filters: AdminUserFilters;
+  onFilter: (filters: AdminUserFilters) => void;
+  currentUserId: string;
   onChanged: () => Promise<void>;
   confirm: (confirmation: ConfirmationState) => void;
   showError: (message: string) => void;
@@ -829,6 +1011,14 @@ function AdminUsersPanel(props: {
     institutionalCode: "",
   });
   const [error, setError] = useState("");
+  const [temporaryCredential, setTemporaryCredential] = useState<{
+    email: string;
+    temporaryPassword: string;
+  } | null>(null);
+  const [credentialCopied, setCredentialCopied] = useState(false);
+  const [credentialCopyError, setCredentialCopyError] = useState("");
+  const [filterDraft, setFilterDraft] = useState(props.filters);
+  useAutoAdminFilter(filterDraft, props.onFilter, filterDraft.search);
 
   function resetForm() {
     setEditingUserId(null);
@@ -900,6 +1090,34 @@ function AdminUsersPanel(props: {
     });
   }
 
+  function resetPassword(user: AdminUser) {
+    props.confirm({
+      title: "Restablecer contraseña",
+      message: `Se generará una clave temporal para ${user.name}. Su contraseña actual dejará de funcionar y se cerrarán sus sesiones.`,
+      confirmLabel: "Generar clave temporal",
+      onConfirm: async () => {
+        const response = await api.post<{
+          email: string;
+          temporaryPassword: string;
+        }>(`/admin/users/${user.id}/reset-password`);
+        setCredentialCopied(false);
+        setCredentialCopyError("");
+        setTemporaryCredential(response.data);
+      },
+    });
+  }
+
+  async function copyTemporaryPassword() {
+    if (!temporaryCredential) return;
+    try {
+      await navigator.clipboard.writeText(temporaryCredential.temporaryPassword);
+      setCredentialCopied(true);
+      setCredentialCopyError("");
+    } catch {
+      setCredentialCopyError("No se pudo copiar automáticamente. Selecciona la clave y cópiala manualmente.");
+    }
+  }
+
   return (
     <section className="admin-grid admin-table-workspace">
       <div className="panel">
@@ -909,6 +1127,23 @@ function AdminUsersPanel(props: {
             <h2>Gestión de usuarios</h2>
           </div>
           <button type="button" onClick={() => { resetForm(); setIsFormOpen(true); }}>Crear usuario</button>
+        </div>
+        <div className="admin-filter-bar">
+          <label className="filter-search-field">
+            Búsqueda inteligente
+            <input value={filterDraft.search} onChange={(event) => setFilterDraft({ ...filterDraft, search: event.target.value })} placeholder="Nombre, cédula o correo" />
+          </label>
+          <label>Rol
+            <select value={filterDraft.role} onChange={(event) => { const next = { ...filterDraft, role: event.target.value }; setFilterDraft(next); props.onFilter(next); }}>
+              <option value="">Todos</option><option value="admin">Administrador</option><option value="docente">Docente</option><option value="estudiante">Estudiante</option>
+            </select>
+          </label>
+          <label>Estado
+            <select value={filterDraft.active} onChange={(event) => { const next = { ...filterDraft, active: event.target.value }; setFilterDraft(next); props.onFilter(next); }}>
+              <option value="">Todos</option><option value="true">Activos</option><option value="false">Inactivos</option>
+            </select>
+          </label>
+          <FilterActions onClear={() => { const cleared = { search: "", role: "", active: "" }; setFilterDraft(cleared); props.onFilter(cleared); }} />
         </div>
         <DataTable
           rows={props.users}
@@ -921,10 +1156,48 @@ function AdminUsersPanel(props: {
           ]}
           actions={(user) => [
             { label: "Editar", icon: "edit", onClick: () => editUser(user) },
+            ...(user.isActive && user.id !== props.currentUserId ? [{ label: "Restablecer contraseña", icon: "key" as const, onClick: () => resetPassword(user) }] : []),
             { label: user.isActive ? "Desactivar" : "Activar", icon: user.isActive ? "disable" : "enable", onClick: () => void toggleUser(user) },
           ]}
+          pagination={props.pagination}
+          isLoading={props.isLoading}
+          onPageChange={props.onPageChange}
         />
       </div>
+
+      {temporaryCredential ? (
+        <ModalDialog
+          title="Clave temporal generada"
+          onClose={() => setTemporaryCredential(null)}
+        >
+          <div className="form-stack">
+            <p className="muted">Cuenta: <strong>{temporaryCredential.email}</strong></p>
+            <label>
+              Contraseña temporal
+              <span className="password-field">
+                <input readOnly value={temporaryCredential.temporaryPassword} />
+                <button
+                  aria-label={credentialCopied ? "Contraseña copiada" : "Copiar contraseña"}
+                  className="password-visibility"
+                  onClick={() => void copyTemporaryPassword()}
+                  title={credentialCopied ? "Contraseña copiada" : "Copiar contraseña"}
+                  type="button"
+                >
+                  <ActionIcon name="copy" />
+                </button>
+              </span>
+            </label>
+            <p className="success-text" role="status">
+              Entrégala al usuario por un canal verificado. Solo se mostrará en esta ventana.
+            </p>
+            {credentialCopied ? <p className="success-text" role="status">Clave copiada.</p> : null}
+            {credentialCopyError ? <p className="error-text" role="alert">{credentialCopyError}</p> : null}
+            <p className="muted">
+              El usuario deberá crear una contraseña nueva al ingresar. La clave temporal no se podrá volver a consultar.
+            </p>
+          </div>
+        </ModalDialog>
+      ) : null}
 
       {isFormOpen ? <ModalDialog title={editingUserId ? "Editar usuario" : "Crear usuario"} onClose={resetForm}>
         <form className="form-stack" onSubmit={saveUser}>
@@ -971,6 +1244,11 @@ function AdminUsersPanel(props: {
 
 function AdminProgramsPanel(props: {
   programs: AcademicProgram[];
+  pagination: PageMetadata;
+  isLoading: boolean;
+  onPageChange: (page: number) => void;
+  filters: AdminCatalogFilters;
+  onFilter: (filters: AdminCatalogFilters) => void;
   onChanged: () => Promise<void>;
   confirm: (confirmation: ConfirmationState) => void;
   showError: (message: string) => void;
@@ -979,6 +1257,8 @@ function AdminProgramsPanel(props: {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [form, setForm] = useState({ code: "", name: "", description: "", isActive: true });
   const [error, setError] = useState("");
+  const [filterDraft, setFilterDraft] = useState(props.filters);
+  useAutoAdminFilter(filterDraft, props.onFilter, filterDraft.search);
 
   function resetForm() {
     setEditingProgramId(null);
@@ -1044,6 +1324,17 @@ function AdminProgramsPanel(props: {
           </div>
           <button type="button" onClick={() => { resetForm(); setIsFormOpen(true); }}>Crear programa</button>
         </div>
+        <div className="admin-filter-bar">
+          <label className="filter-search-field">Buscar programa
+            <input value={filterDraft.search} onChange={(event) => setFilterDraft({ ...filterDraft, search: event.target.value })} placeholder="Nombre o código" />
+          </label>
+          <label>Estado
+            <select value={filterDraft.active} onChange={(event) => { const next = { ...filterDraft, active: event.target.value }; setFilterDraft(next); props.onFilter(next); }}>
+              <option value="">Todos</option><option value="true">Activos</option><option value="false">Inactivos</option>
+            </select>
+          </label>
+          <FilterActions onClear={() => { const cleared = { search: "", active: "" }; setFilterDraft(cleared); props.onFilter(cleared); }} />
+        </div>
         <DataTable
           rows={props.programs}
           emptyMessage="No hay programas registrados."
@@ -1057,6 +1348,9 @@ function AdminProgramsPanel(props: {
             { label: "Editar", icon: "edit", onClick: () => editProgram(program) },
             { label: "Eliminar", icon: "delete", onClick: () => void deleteProgram(program.id) },
           ]}
+          pagination={props.pagination}
+          isLoading={props.isLoading}
+          onPageChange={props.onPageChange}
         />
       </div>
 
@@ -1091,8 +1385,12 @@ function AdminProgramsPanel(props: {
 
 function AdminSpacesPanel(props: {
   academicSpaces: AcademicSpace[];
-  programs: AcademicProgram[];
-  users: AdminUser[];
+  programs: ProgramOption[];
+  pagination: PageMetadata;
+  isLoading: boolean;
+  onPageChange: (page: number) => void;
+  filters: AdminSpaceFilters;
+  onFilter: (filters: AdminSpaceFilters) => void;
   onChanged: () => Promise<void>;
   confirm: (confirmation: ConfirmationState) => void;
   showError: (message: string) => void;
@@ -1116,6 +1414,8 @@ function AdminSpacesPanel(props: {
     studentUserId: "",
   });
   const [error, setError] = useState("");
+  const [filterDraft, setFilterDraft] = useState(props.filters);
+  useAutoAdminFilter(filterDraft, props.onFilter, filterDraft.search);
 
   useEffect(() => {
     if (!form.programId && firstProgramId) {
@@ -1212,9 +1512,6 @@ function AdminSpacesPanel(props: {
     setIsAssignmentOpen(false);
   }
 
-  const teachers = props.users.filter((user) => user.role === "docente" && user.isActive);
-  const students = props.users.filter((user) => user.role === "estudiante" && user.isActive);
-
   return (
     <section className="admin-grid admin-table-workspace">
       <div className="panel">
@@ -1227,6 +1524,22 @@ function AdminSpacesPanel(props: {
             <button type="button" onClick={() => { resetForm(); setIsFormOpen(true); }}>Crear espacio</button>
             <button type="button" className="secondary-button" onClick={() => setIsAssignmentOpen(true)}>Asignar usuario</button>
           </div>
+        </div>
+        <div className="admin-filter-bar">
+          <label className="filter-search-field">Buscar espacio
+            <input value={filterDraft.search} onChange={(event) => setFilterDraft({ ...filterDraft, search: event.target.value })} placeholder="Nombre o código" />
+          </label>
+          <label>Programa
+            <select value={filterDraft.programId} onChange={(event) => { const next = { ...filterDraft, programId: event.target.value }; setFilterDraft(next); props.onFilter(next); }}>
+              <option value="">Todos</option>{props.programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
+            </select>
+          </label>
+          <label>Estado
+            <select value={filterDraft.active} onChange={(event) => { const next = { ...filterDraft, active: event.target.value }; setFilterDraft(next); props.onFilter(next); }}>
+              <option value="">Todos</option><option value="true">Activos</option><option value="false">Inactivos</option>
+            </select>
+          </label>
+          <FilterActions onClear={() => { const cleared = { search: "", active: "", programId: "" }; setFilterDraft(cleared); props.onFilter(cleared); }} />
         </div>
         <DataTable
           rows={props.academicSpaces}
@@ -1242,6 +1555,9 @@ function AdminSpacesPanel(props: {
             { label: "Editar", icon: "edit", onClick: () => editSpace(space) },
             { label: "Eliminar", icon: "delete", onClick: () => void deleteSpace(space.id) },
           ]}
+          pagination={props.pagination}
+          isLoading={props.isLoading}
+          onPageChange={props.onPageChange}
         />
       </div>
 
@@ -1299,31 +1615,24 @@ function AdminSpacesPanel(props: {
             </div>
           </div>
           <div className="form-stack">
-            <label>
-              Espacio académico
-              <select value={assignment.spaceId} onChange={(event) => setAssignment({ ...assignment, spaceId: event.target.value })}>
-                <option value="">Selecciona un espacio</option>
-                {props.academicSpaces.map((space) => (
-                  <option key={space.id} value={space.id}>{space.name}</option>
-                ))}
-              </select>
-            </label>
+            <AdminSpacePicker
+              value={assignment.spaceId}
+              onChange={(spaceId) => setAssignment((current) => ({ ...current, spaceId }))}
+            />
             <div className="inline-form">
-              <select value={assignment.teacherUserId} onChange={(event) => setAssignment({ ...assignment, teacherUserId: event.target.value })}>
-                <option value="">Docente</option>
-                {teachers.map((teacher) => (
-                  <option key={teacher.id} value={teacher.id}>{teacher.name}</option>
-                ))}
-              </select>
+              <AdminUserPicker
+                role="docente"
+                value={assignment.teacherUserId}
+                onChange={(teacherUserId) => setAssignment((current) => ({ ...current, teacherUserId }))}
+              />
               <button type="button" onClick={() => void assignTeacher()}>Asignar</button>
             </div>
             <div className="inline-form">
-              <select value={assignment.studentUserId} onChange={(event) => setAssignment({ ...assignment, studentUserId: event.target.value })}>
-                <option value="">Estudiante</option>
-                {students.map((student) => (
-                  <option key={student.id} value={student.id}>{student.name}</option>
-                ))}
-              </select>
+              <AdminUserPicker
+                role="estudiante"
+                value={assignment.studentUserId}
+                onChange={(studentUserId) => setAssignment((current) => ({ ...current, studentUserId }))}
+              />
               <button type="button" onClick={() => void assignStudent()}>Asignar</button>
             </div>
           </div>
@@ -1333,11 +1642,27 @@ function AdminSpacesPanel(props: {
 }
 
 function AdminAssignmentsPanel(props: {
-  assignments: AdminAssignment[];
+  programAssignments: AdminAssignment[];
+  programPagination: PageMetadata;
+  onProgramPageChange: (page: number) => void;
+  spaceAssignments: AdminAssignment[];
+  spacePagination: PageMetadata;
+  onSpacePageChange: (page: number) => void;
+  programOptions: ProgramOption[];
+  programFilters: AdminAssignmentFilters;
+  onProgramFilter: (filters: AdminAssignmentFilters) => void;
+  spaceFilters: AdminAssignmentFilters;
+  onSpaceFilter: (filters: AdminAssignmentFilters) => void;
+  isLoading: boolean;
   onChanged: () => Promise<void>;
   confirm: (confirmation: ConfirmationState) => void;
   showError: (message: string) => void;
 }) {
+  const [programDraft, setProgramDraft] = useState(props.programFilters);
+  const [spaceDraft, setSpaceDraft] = useState(props.spaceFilters);
+  useAutoAdminFilter(programDraft, props.onProgramFilter, programDraft.search);
+  useAutoAdminFilter(spaceDraft, props.onSpaceFilter, spaceDraft.search);
+
   async function removeAssignment(assignment: AdminAssignment) {
     props.confirm({
       title: "Desasignar usuario",
@@ -1365,9 +1690,6 @@ function AdminAssignmentsPanel(props: {
     });
   }
 
-  const programAssignments = props.assignments.filter((assignment) => assignment.scope === "program");
-  const spaceAssignments = props.assignments.filter((assignment) => assignment.scope === "academic_space");
-
   return (
     <section className="admin-grid admin-assignment-grid">
       <div className="panel">
@@ -1377,7 +1699,18 @@ function AdminAssignmentsPanel(props: {
             <h2>Estudiantes por programa</h2>
           </div>
         </div>
-        <AssignmentList assignments={programAssignments} onRemove={removeAssignment} />
+        <div className="admin-filter-bar">
+          <label className="filter-search-field">Buscar estudiante
+            <input value={programDraft.search} onChange={(event) => setProgramDraft({ ...programDraft, search: event.target.value })} placeholder="Nombre, cédula o correo" />
+          </label>
+          <label>Programa
+            <select value={programDraft.programId} onChange={(event) => { const next = { ...programDraft, programId: event.target.value }; setProgramDraft(next); props.onProgramFilter(next); }}>
+              <option value="">Todos</option>{props.programOptions.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
+            </select>
+          </label>
+          <FilterActions onClear={() => { const cleared = { search: "", programId: "", spaceId: "", relation: "" }; setProgramDraft(cleared); props.onProgramFilter(cleared); }} />
+        </div>
+        <AssignmentList assignments={props.programAssignments} pagination={props.programPagination} isLoading={props.isLoading} onPageChange={props.onProgramPageChange} onRemove={removeAssignment} />
       </div>
 
       <div className="panel">
@@ -1387,17 +1720,30 @@ function AdminAssignmentsPanel(props: {
             <h2>Usuarios por espacio</h2>
           </div>
         </div>
-        <AssignmentList assignments={spaceAssignments} onRemove={removeAssignment} />
+        <div className="admin-filter-bar">
+          <label className="filter-search-field">Buscar usuario o espacio
+            <input value={spaceDraft.search} onChange={(event) => setSpaceDraft({ ...spaceDraft, search: event.target.value })} placeholder="Nombre, cédula o correo" />
+          </label>
+          <label>Programa
+            <select value={spaceDraft.programId} onChange={(event) => { const next = { ...spaceDraft, programId: event.target.value, spaceId: "" }; setSpaceDraft(next); props.onSpaceFilter(next); }}>
+              <option value="">Todos</option>{props.programOptions.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
+            </select>
+          </label>
+          <AdminSpacePicker value={spaceDraft.spaceId} programId={spaceDraft.programId} onChange={(spaceId) => { const next = { ...spaceDraft, spaceId }; setSpaceDraft(next); props.onSpaceFilter(next); }} />
+          <label>Tipo de usuario
+            <select value={spaceDraft.relation} onChange={(event) => { const next = { ...spaceDraft, relation: event.target.value }; setSpaceDraft(next); props.onSpaceFilter(next); }}>
+              <option value="">Todos</option><option value="teacher">Docentes</option><option value="student">Estudiantes</option>
+            </select>
+          </label>
+          <FilterActions onClear={() => { const cleared = { search: "", programId: "", spaceId: "", relation: "" }; setSpaceDraft(cleared); props.onSpaceFilter(cleared); }} />
+        </div>
+        <AssignmentList assignments={props.spaceAssignments} pagination={props.spacePagination} isLoading={props.isLoading} onPageChange={props.onSpacePageChange} onRemove={removeAssignment} />
       </div>
     </section>
   );
 }
 
-function AdminResultsPanel(props: {
-  programs: AcademicProgram[];
-  academicSpaces: AcademicSpace[];
-  users: AdminUser[];
-}) {
+function AdminResultsPanel() {
   const [filters, setFilters] = useState({
     programId: "",
     academicSpaceId: "",
@@ -1407,6 +1753,9 @@ function AdminResultsPanel(props: {
     dateTo: "",
   });
   const [results, setResults] = useState<AdminResultAttempt[]>([]);
+  const [pagination, setPagination] = useState(EMPTY_PAGE);
+  const [resultsPage, setResultsPage] = useState(1);
+  const [programs, setPrograms] = useState<ProgramOption[]>([]);
   const [metrics, setMetrics] = useState<AdminResultMetrics | null>(null);
   const [selectedAttemptId, setSelectedAttemptId] = useState("");
   const [attemptDetail, setAttemptDetail] = useState<AdminAttemptDetail | null>(null);
@@ -1414,21 +1763,33 @@ function AdminResultsPanel(props: {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [error, setError] = useState("");
   const filtersRef = useRef(filters);
+  const resultsPageRef = useRef(resultsPage);
+  const isFirstFilterRender = useRef(true);
   filtersRef.current = filters;
-
-  const teachers = props.users.filter((user) => user.role === "docente");
-  const students = props.users.filter((user) => user.role === "estudiante");
-  const filteredSpaces = filters.programId
-    ? props.academicSpaces.filter((space) => space.programId === filters.programId)
-    : props.academicSpaces;
+  resultsPageRef.current = resultsPage;
 
   useEffect(() => {
     void loadResults();
-    const refreshTimer = window.setInterval(() => void loadResults(true, filtersRef.current), 30_000);
+    void api.get<{ programs: ProgramOption[] }>("/admin/programs/options")
+      .then((response) => setPrograms(response.data.programs))
+      .catch(() => setError("No fue posible cargar los programas."));
+    const refreshTimer = window.setInterval(() => void loadResults(true, filtersRef.current, resultsPageRef.current), 30_000);
     return () => window.clearInterval(refreshTimer);
   }, []);
 
-  async function loadResults(isBackground = false, currentFilters = filters) {
+  useEffect(() => {
+    if (isFirstFilterRender.current) {
+      isFirstFilterRender.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setResultsPage(1);
+      void loadResults(false, filters, 1);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [filters]);
+
+  async function loadResults(isBackground = false, currentFilters = filters, page = resultsPage) {
     if (!isBackground) setIsLoadingResults(true);
     setError("");
     if (!isBackground) {
@@ -1437,10 +1798,12 @@ function AdminResultsPanel(props: {
     }
 
     const params = buildAdminResultParams(currentFilters);
+    params.set("page", String(page));
+    params.set("pageSize", String(ADMIN_PAGE_SIZE));
 
     try {
       const [resultsResponse, metricsResponse] = await Promise.all([
-        api.get<{ results: AdminResultAttempt[] }>(
+        api.get<{ results: AdminResultAttempt[]; pagination: PageMetadata }>(
           `/admin/results${params.size ? `?${params.toString()}` : ""}`,
         ),
         api.get<{ metrics: AdminResultMetrics }>(
@@ -1448,6 +1811,8 @@ function AdminResultsPanel(props: {
         ),
       ]);
       setResults(resultsResponse.data.results);
+      setPagination(resultsResponse.data.pagination);
+      setResultsPage(resultsResponse.data.pagination.page);
       setMetrics(metricsResponse.data.metrics);
     } catch (unknownError) {
       setError(getApiErrorMessage(unknownError));
@@ -1514,49 +1879,19 @@ function AdminResultsPanel(props: {
             <h2>Resultados globales</h2>
           </div>
         </div>
-        <form className="filter-grid" onSubmit={(event) => {
-          event.preventDefault();
-          void loadResults();
-        }}>
+        <form className="filter-grid" onSubmit={(event) => event.preventDefault()}>
           <label>
             Programa
             <select value={filters.programId} onChange={(event) => updateFilter("programId", event.target.value)}>
               <option value="">Todos</option>
-              {props.programs.map((program) => (
+              {programs.map((program) => (
                 <option key={program.id} value={program.id}>{program.name}</option>
               ))}
             </select>
           </label>
-          <label>
-            Espacio
-            <select
-              value={filters.academicSpaceId}
-              onChange={(event) => updateFilter("academicSpaceId", event.target.value)}
-            >
-              <option value="">Todos</option>
-              {filteredSpaces.map((space) => (
-                <option key={space.id} value={space.id}>{space.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Docente
-            <select value={filters.teacherUserId} onChange={(event) => updateFilter("teacherUserId", event.target.value)}>
-              <option value="">Todos</option>
-              {teachers.map((teacher) => (
-                <option key={teacher.id} value={teacher.id}>{teacher.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Estudiante
-            <select value={filters.studentUserId} onChange={(event) => updateFilter("studentUserId", event.target.value)}>
-              <option value="">Todos</option>
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>{student.name}</option>
-              ))}
-            </select>
-          </label>
+          <AdminSpacePicker value={filters.academicSpaceId} programId={filters.programId} onChange={(value) => updateFilter("academicSpaceId", value)} />
+          <AdminUserPicker role="docente" value={filters.teacherUserId} onChange={(value) => updateFilter("teacherUserId", value)} />
+          <AdminUserPicker role="estudiante" value={filters.studentUserId} onChange={(value) => updateFilter("studentUserId", value)} />
           <label>
             Desde
             <input type="date" value={filters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} />
@@ -1566,9 +1901,6 @@ function AdminResultsPanel(props: {
             <input type="date" value={filters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} />
           </label>
           <div className="inline-form filter-actions">
-            <button type="submit" disabled={isLoadingResults}>
-              {isLoadingResults ? "Consultando..." : "Consultar"}
-            </button>
             <button type="button" className="secondary-button" onClick={() => void exportResults("csv")}>
               Exportar CSV
             </button>
@@ -1630,6 +1962,7 @@ function AdminResultsPanel(props: {
               ))}
             </div>
           ) : null}
+          <TablePagination pagination={pagination} isLoading={isLoadingResults} onPageChange={(page) => { setResultsPage(page); void loadResults(false, filters, page); }} />
         </div>
 
         <AdminAttemptResultPanel
@@ -1818,8 +2151,177 @@ function buildAdminResultParams(filters: {
   return params;
 }
 
+function AdminUserPicker(props: {
+  role: AppRole;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <RemoteAdminPicker
+      label={props.role === "docente" ? "Docente" : "Estudiante"}
+      placeholder="Nombre, cédula o correo"
+      value={props.value}
+      onChange={props.onChange}
+      loadOptions={async (search) => {
+        const response = await api.get<{ users: AdminUser[] }>("/admin/users", {
+          params: { role: props.role, search, pageSize: 10 },
+        });
+        return response.data.users.map((user) => ({ id: user.id, label: `${user.name} · ${user.email}` }));
+      }}
+    />
+  );
+}
+
+function AdminSpacePicker(props: {
+  value: string;
+  onChange: (value: string) => void;
+  programId?: string;
+}) {
+  return (
+    <RemoteAdminPicker
+      label="Espacio académico"
+      placeholder="Buscar espacio"
+      value={props.value}
+      onChange={props.onChange}
+      programId={props.programId}
+      loadOptions={async (search) => {
+        const response = await api.get<{ academicSpaces: AcademicSpace[] }>("/admin/academic-spaces", {
+          params: { search, programId: props.programId || undefined, pageSize: 10 },
+        });
+        return response.data.academicSpaces.map((space) => ({ id: space.id, label: space.name }));
+      }}
+    />
+  );
+}
+
+function RemoteAdminPicker(props: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  loadOptions: (search: string) => Promise<SearchOption[]>;
+  programId?: string;
+}) {
+  const [search, setSearch] = useState("");
+  const [options, setOptions] = useState<SearchOption[]>([]);
+  const [selected, setSelected] = useState<SearchOption | null>(null);
+  const [loading, setLoading] = useState(false);
+  const loadRef = useRef(props.loadOptions);
+
+  useEffect(() => {
+    loadRef.current = props.loadOptions;
+  }, [props.loadOptions]);
+
+  useEffect(() => {
+    if (props.value !== selected?.id) {
+      setSelected(options.find((option) => option.id === props.value) ?? null);
+    }
+  }, [props.value, selected?.id, options]);
+
+  useEffect(() => {
+    const term = search.trim();
+    if (term.length < 2) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      void loadRef.current(term)
+        .then(setOptions)
+        .catch(() => setOptions([]))
+        .finally(() => setLoading(false));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [search, props.programId]);
+
+  return (
+    <label className="remote-picker">
+      {props.label}
+      <input
+        value={selected && props.value ? selected.label : search}
+        placeholder={props.placeholder}
+        onChange={(event) => {
+          const value = event.target.value;
+          setSelected(null);
+          setSearch(value);
+          if (props.value) props.onChange("");
+        }}
+      />
+      {loading ? <small>Buscando...</small> : null}
+      {!loading && search.trim().length >= 2 ? (
+        <select
+          aria-label={`Resultados de ${props.label.toLowerCase()}`}
+          size={Math.min(Math.max(options.length, 2), 5)}
+          value={props.value}
+          onChange={(event) => {
+            const option = options.find((item) => item.id === event.target.value) ?? null;
+            setSelected(option);
+            setSearch("");
+            props.onChange(option?.id ?? "");
+          }}
+        >
+          <option value="">{options.length ? "Selecciona un resultado" : "Sin coincidencias"}</option>
+          {options.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+        </select>
+      ) : null}
+    </label>
+  );
+}
+
+function TablePagination(props: {
+  pagination: PageMetadata;
+  isLoading?: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  const { page, totalPages, totalItems, pageSize } = props.pagination;
+  if (totalItems === 0) return null;
+  const first = (page - 1) * pageSize + 1;
+  const last = Math.min(page * pageSize, totalItems);
+  return (
+    <nav className="table-pagination" aria-label="Paginación de resultados">
+      <span>{first}-{last} de {totalItems}</span>
+      <div>
+        <button type="button" className="secondary-button" disabled={page <= 1 || props.isLoading} onClick={() => props.onPageChange(page - 1)}>Anterior</button>
+        <span>Página {page} de {totalPages}</span>
+        <button type="button" className="secondary-button" disabled={page >= totalPages || props.isLoading} onClick={() => props.onPageChange(page + 1)}>Siguiente</button>
+      </div>
+    </nav>
+  );
+}
+
+function useAutoAdminFilter<T extends { search: string }>(
+  draft: T,
+  onApply: (filters: T) => void,
+  search: string,
+) {
+  const draftRef = useRef(draft);
+  const applyRef = useRef(onApply);
+  const isInitial = useRef(true);
+
+  useEffect(() => { draftRef.current = draft; }, [draft]);
+  useEffect(() => { applyRef.current = onApply; }, [onApply]);
+  useEffect(() => {
+    if (isInitial.current) {
+      isInitial.current = false;
+      return;
+    }
+    const timer = window.setTimeout(() => applyRef.current(draftRef.current), 280);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+}
+
+function FilterActions(props: { onClear: () => void }) {
+  return (
+    <div className="admin-filter-actions">
+      <button type="button" className="secondary-button" onClick={props.onClear}>Limpiar filtros</button>
+    </div>
+  );
+}
+
 function AssignmentList(props: {
   assignments: AdminAssignment[];
+  pagination: PageMetadata;
+  isLoading: boolean;
+  onPageChange: (page: number) => void;
   onRemove: (assignment: AdminAssignment) => Promise<void>;
 }) {
   if (props.assignments.length === 0) {
@@ -1837,6 +2339,9 @@ function AssignmentList(props: {
         { label: "Usuario", render: (assignment) => <span className="assignment-user-cell"><strong>{assignment.userName}</strong><small>{assignment.userEmail}</small></span> },
       ]}
       actions={(assignment) => [{ label: "Desasignar", icon: "remove", onClick: () => void props.onRemove(assignment) }]}
+      pagination={props.pagination}
+      isLoading={props.isLoading}
+      onPageChange={props.onPageChange}
     />
   );
 }
@@ -3188,7 +3693,7 @@ function AdminRow(props: {
 
 type TableAction = {
   label: string;
-  icon?: "edit" | "enable" | "disable" | "delete" | "remove";
+  icon?: "edit" | "enable" | "disable" | "delete" | "remove" | "key" | "copy";
   onClick: () => void;
 };
 type TableColumn<T> = { label: string; render: (row: T) => ReactNode };
@@ -3199,9 +3704,13 @@ function DataTable<T extends { id: string }>(props: {
   actions: (row: T) => TableAction[];
   emptyMessage: string;
   compact?: boolean;
+  pagination?: PageMetadata;
+  isLoading?: boolean;
+  onPageChange?: (page: number) => void;
 }) {
   return (
     <div className="data-table-wrap">
+      {props.isLoading ? <p className="table-loading" role="status">Actualizando...</p> : null}
       <table className={`data-table ${props.compact ? "compact" : ""}`}>
         <thead>
           <tr>
@@ -3235,6 +3744,9 @@ function DataTable<T extends { id: string }>(props: {
           ))}
         </tbody>
       </table>
+      {props.pagination && props.onPageChange ? (
+        <TablePagination pagination={props.pagination} isLoading={props.isLoading} onPageChange={props.onPageChange} />
+      ) : null}
     </div>
   );
 }
@@ -3246,6 +3758,8 @@ function ActionIcon(props: { name: NonNullable<TableAction["icon"]> }) {
     disable: <><path d="M12 3v9" /><path d="M7 5.8a8 8 0 1 0 10 0" /></>,
     delete: <><path d="M4 7h16" /><path d="M10 11v6M14 11v6" /><path d="m5 7 1 14h12l1-14M9 7V4h6v3" /></>,
     remove: <><path d="M4 7h16" /><path d="M10 11v6M14 11v6" /><path d="m5 7 1 14h12l1-14" /></>,
+    key: <><circle cx="8" cy="15" r="4" /><path d="m11 12 9-9m-5 5 3 3m-6-1 3 3" /></>,
+    copy: <><rect x="8" y="8" width="12" height="12" rx="1" /><path d="M16 8V4H4v12h4" /></>,
   };
 
   return (
