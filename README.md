@@ -64,6 +64,8 @@ Vite muestra en la terminal la dirección local, normalmente `http://localhost:5
 
 En otra terminal, inicia el backend siguiendo su [guía de instalación](https://github.com/harrysoler/ai_conversational_evaluator_backend#puesta-en-marcha). Si el frontend corre en un puerto distinto de `5173`, configura ese origen también en las variables de CORS del backend.
 
+Las cuentas institucionales importadas ingresan con su correo y, solo para el primer acceso, el número de documento como contraseña temporal. La aplicación exige reemplazarla antes de abrir los módulos.
+
 ## Comandos disponibles
 
 ```bash

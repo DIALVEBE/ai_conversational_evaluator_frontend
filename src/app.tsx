@@ -20,6 +20,7 @@ type AppUser = {
     documentNumber: string | null;
     institutionalCode: string | null;
     isActive: boolean;
+    mustChangePassword: boolean;
   } | null;
 };
 
@@ -350,6 +351,22 @@ export function App() {
     );
   }
 
+  if (appUser?.profile?.mustChangePassword) {
+    return (
+      <main className="shell">
+        <InstitutionalStrip />
+        <SessionHeader user={appUser} onSignOut={session.refetch} />
+        <InitialPasswordScreen
+          onComplete={async () => {
+            const response = await api.get<{ user: AppUser }>("/me");
+            setAppUser(response.data.user);
+          }}
+        />
+        <AppFooter />
+      </main>
+    );
+  }
+
   return (
     <main className="shell">
       <InstitutionalStrip />
@@ -363,8 +380,8 @@ export function App() {
 function LoginScreen(props: {
   onSignedIn: () => Promise<unknown> | unknown;
 }) {
-  const [email, setEmail] = useState("admin.demo@virtualchallenge.edu");
-  const [password, setPassword] = useState("Demo2026!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -420,6 +437,7 @@ function LoginScreen(props: {
               <input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+                placeholder="nombre@institucion.edu.co"
                 type="email"
                 autoComplete="email"
                 required
@@ -444,22 +462,87 @@ function LoginScreen(props: {
             </button>
           </form>
 
-          <div className="demo-users">
-            <span>Demo</span>
-            <button type="button" onClick={() => setEmail("admin.demo@virtualchallenge.edu")}>
-              Admin
-            </button>
-            <button type="button" onClick={() => setEmail("docente.demo@virtualchallenge.edu")}>
-              Docente
-            </button>
-            <button type="button" onClick={() => setEmail("estudiante.demo@virtualchallenge.edu")}>
-              Estudiante
-            </button>
-          </div>
         </div>
       </section>
       <AppFooter />
     </main>
+  );
+}
+
+function InitialPasswordScreen(props: { onComplete: () => Promise<void> }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    if (newPassword !== confirmPassword) {
+      setError("Las contraseñas nuevas no coinciden.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await api.post("/me/initial-password", { currentPassword, newPassword });
+      await props.onComplete();
+    } catch {
+      setError("No fue posible actualizar la contraseña. Verifica la contraseña temporal e inténtalo de nuevo.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <section className="panel initial-password-panel">
+      <p className="eyebrow">Primer ingreso</p>
+      <h1>Actualiza tu contraseña</h1>
+      <p className="muted">
+        Tu número de documento es la contraseña temporal. Reemplázala ahora por una
+        contraseña nueva de al menos 12 caracteres antes de continuar.
+      </p>
+      <form className="form-stack" onSubmit={onSubmit}>
+        <label>
+          Contraseña temporal
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </label>
+        <label>
+          Nueva contraseña
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            autoComplete="new-password"
+            minLength={12}
+            required
+          />
+        </label>
+        <label>
+          Confirmar nueva contraseña
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            autoComplete="new-password"
+            minLength={12}
+            required
+          />
+        </label>
+        {error ? <p className="error-text">{error}</p> : null}
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Actualizando..." : "Guardar contraseña"}
+        </button>
+      </form>
+    </section>
   );
 }
 

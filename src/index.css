@@ -294,6 +294,13 @@ p {
   padding: 36px;
 }
 
+.initial-password-panel {
+  align-self: center;
+  margin: 0 auto;
+  max-width: 620px;
+  width: 100%;
+}
+
 .role-workspace,
 .content-stack,
 .form-stack,
@@ -417,7 +424,6 @@ p {
   text-transform: uppercase;
 }
 
-.demo-users,
 .inline-form,
 .voice-actions,
 .role-tabs,
@@ -428,13 +434,7 @@ p {
   gap: 10px;
 }
 
-.demo-users span {
-  color: var(--text-muted);
-  font-weight: 800;
-}
-
 .secondary-button,
-.demo-users button,
 .nav-item,
 .role-tabs button:not(.active),
 .workflow-step {
@@ -445,7 +445,6 @@ p {
 }
 
 .secondary-button:hover:not(:disabled),
-.demo-users button:hover:not(:disabled),
 .nav-item:hover:not(:disabled),
 .role-tabs button:not(.active):hover:not(:disabled),
 .workflow-step:hover:not(:disabled) {
