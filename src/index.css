@@ -1400,15 +1400,19 @@ p {
   border: 0;
   border-radius: 0;
   inset: 0;
-  overflow: auto;
+  overflow: hidden;
   position: fixed;
   z-index: 1000;
 }
 
 .live-talk-stage.is-immersive .live-talk-content {
-  margin: auto;
-  max-width: 1280px;
-  min-height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
+  max-width: none;
+  min-height: 0;
+  padding: 16px clamp(18px, 4vw, 64px) 28px;
   width: 100%;
 }
 
@@ -1416,6 +1420,73 @@ p {
   align-items: center;
   display: flex;
   justify-content: flex-end;
+}
+
+.live-talk-stage.is-immersive .live-talk-content > div:not(.immersive-toolbar),
+.live-talk-stage.is-immersive .voice-orb-panel > strong,
+.live-talk-stage.is-immersive .voice-orb-panel > span,
+.live-talk-stage.is-immersive .voice-control-panel > div:first-child,
+.live-talk-stage.is-immersive .voice-meta {
+  display: none;
+}
+
+.live-talk-stage.is-immersive .voice-console {
+  align-items: stretch;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+.live-talk-stage.is-immersive .voice-orb-panel {
+  align-content: center;
+  border: 0;
+  min-height: 0;
+  padding: 0;
+}
+
+.live-talk-stage.is-immersive .voice-orb {
+  height: min(82vw, 58vh, 680px);
+  height: min(82vw, 58dvh, 680px);
+  width: min(82vw, 58vh, 680px);
+  width: min(82vw, 58dvh, 680px);
+}
+
+.live-talk-stage.is-immersive .voice-core {
+  height: 46%;
+  width: 46%;
+}
+
+.live-talk-stage.is-immersive .voice-core i {
+  height: 25%;
+  width: 9px;
+}
+
+.live-talk-stage.is-immersive .voice-core i:nth-child(2) {
+  height: 40%;
+}
+
+.live-talk-stage.is-immersive .voice-control-panel {
+  align-items: end;
+  column-gap: 24px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0 auto;
+  max-width: 1040px;
+  width: 100%;
+}
+
+.live-talk-stage.is-immersive .voice-meter-grid {
+  grid-column: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.live-talk-stage.is-immersive .voice-actions {
+  grid-column: 2;
 }
 
 @keyframes immersive-enter {
@@ -1995,6 +2066,23 @@ p {
 
   .row-actions {
     justify-content: flex-start;
+    width: 100%;
+  }
+
+  .live-talk-stage.is-immersive .live-talk-content {
+    padding: 12px 16px 20px;
+  }
+
+  .live-talk-stage.is-immersive .voice-control-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .live-talk-stage.is-immersive .voice-actions {
+    grid-column: 1;
+    width: 100%;
+  }
+
+  .live-talk-stage.is-immersive .voice-actions > button {
     width: 100%;
   }
 }
