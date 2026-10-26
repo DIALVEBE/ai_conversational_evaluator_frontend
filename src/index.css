@@ -1454,6 +1454,18 @@ p {
   height: min(82vw, 58dvh, 680px);
   width: min(82vw, 58vh, 680px);
   width: min(82vw, 58dvh, 680px);
+  isolation: isolate;
+}
+
+.live-talk-stage.is-immersive .voice-orb::before,
+.live-talk-stage.is-immersive .voice-orb::after {
+  border: 1px solid rgb(0 217 255 / 32%);
+  border-radius: 50%;
+  content: "";
+  inset: 3%;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
 }
 
 .live-talk-stage.is-immersive .voice-core {
@@ -1468,6 +1480,56 @@ p {
 
 .live-talk-stage.is-immersive .voice-core i:nth-child(2) {
   height: 40%;
+}
+
+.live-talk-stage.is-immersive .voice-console.voice-listening .voice-orb::before,
+.live-talk-stage.is-immersive .voice-console.voice-speaking .voice-orb::before,
+.live-talk-stage.is-immersive .voice-console.voice-connecting .voice-orb::before {
+  animation: voiceWave 2.1s ease-out infinite;
+}
+
+.live-talk-stage.is-immersive .voice-console.voice-listening .voice-orb::after,
+.live-talk-stage.is-immersive .voice-console.voice-speaking .voice-orb::after,
+.live-talk-stage.is-immersive .voice-console.voice-connecting .voice-orb::after {
+  animation: voiceWave 2.1s ease-out 1.05s infinite;
+  border-color: rgb(0 217 255 / 20%);
+}
+
+.live-talk-stage.is-immersive .voice-console.voice-listening .voice-ring,
+.live-talk-stage.is-immersive .voice-console.voice-speaking .voice-ring,
+.live-talk-stage.is-immersive .voice-console.voice-connecting .voice-ring {
+  border-width: 2px;
+  filter: drop-shadow(0 0 12px rgb(0 217 255 / 60%));
+}
+
+.live-talk-stage.is-immersive .voice-console.voice-listening .voice-ring-one,
+.live-talk-stage.is-immersive .voice-console.voice-speaking .voice-ring-two,
+.live-talk-stage.is-immersive .voice-console.voice-thinking .voice-ring-one,
+.live-talk-stage.is-immersive .voice-console.voice-connecting .voice-ring-one {
+  animation: voicePulse 1.1s ease-in-out infinite;
+}
+
+.live-talk-stage.is-immersive .voice-console.voice-listening .voice-core,
+.live-talk-stage.is-immersive .voice-console.voice-speaking .voice-core,
+.live-talk-stage.is-immersive .voice-console.voice-connecting .voice-core {
+  animation: voiceCoreGlow 1.5s ease-in-out infinite;
+  border-color: rgb(0 217 255 / 58%);
+}
+
+.live-talk-stage.is-immersive .voice-console.voice-listening .voice-core i {
+  animation: voiceBarActive 680ms ease-in-out infinite;
+}
+
+.live-talk-stage.is-immersive .voice-console.voice-speaking .voice-core i {
+  animation: voiceBarActive 420ms ease-in-out infinite;
+}
+
+.live-talk-stage.is-immersive .voice-console.voice-speaking .voice-core {
+  background: radial-gradient(circle, rgb(0 217 255 / 38%), rgb(255 255 255 / 9%) 58%, #07080b 74%);
+}
+
+.live-talk-stage.is-immersive .voice-console.voice-thinking .voice-orb {
+  filter: drop-shadow(0 0 30px rgb(0 217 255 / 26%));
 }
 
 .live-talk-stage.is-immersive .voice-control-panel {
@@ -1883,16 +1945,52 @@ p {
 
 @keyframes voicePulse {
   0% {
-    opacity: 0.45;
-    transform: scale(0.95);
+    opacity: 0.32;
+    transform: scale(0.9);
   }
   50% {
-    opacity: 1;
-    transform: scale(1.04);
+    opacity: 0.95;
+    transform: scale(1.13);
   }
   100% {
-    opacity: 0.45;
-    transform: scale(0.95);
+    opacity: 0.32;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes voiceWave {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  18% {
+    opacity: 0.58;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.48);
+  }
+}
+
+@keyframes voiceCoreGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 22px rgb(0 217 255 / 18%), inset 0 0 18px rgb(0 217 255 / 9%);
+    transform: scale(0.97);
+  }
+  50% {
+    box-shadow: 0 0 72px rgb(0 217 255 / 48%), inset 0 0 34px rgb(0 217 255 / 22%);
+    transform: scale(1.045);
+  }
+}
+
+@keyframes voiceBarActive {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1.8);
   }
 }
 
