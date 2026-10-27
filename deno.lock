@@ -2,7 +2,6 @@
   "version": "5",
   "specifiers": {
     "npm:@tanstack/ai-openai@~0.22.8": "0.22.8_@tanstack+ai@0.55.0",
-    "npm:@tanstack/ai-react@0.27": "0.27.0_@tanstack+ai@0.55.0_@types+react@19.3.0_react@19.3.0_react-dom@19.3.0__react@19.3.0",
     "npm:@tanstack/ai@0.55": "0.55.0",
     "npm:@types/node@^24.13.3": "24.13.6",
     "npm:@types/react-dom@^19.2.7": "19.3.0_@types+react@19.3.0",
@@ -665,19 +664,23 @@
     "packageJson": {
       "dependencies": [
         "npm:@tanstack/ai-openai@~0.22.8",
-        "npm:@tanstack/ai-react@0.27",
+        "npm:@tanstack/ai-react@0.27.0",
         "npm:@tanstack/ai@0.55",
         "npm:@types/node@^24.13.3",
         "npm:@types/react-dom@^19.2.7",
         "npm:@types/react@^19.2.18",
         "npm:@vitejs/plugin-react@^6.1.1",
         "npm:axios@^1.20.0",
+        "npm:better-auth@^1.7.5",
         "npm:oxlint@^1.81.0",
         "npm:react-dom@^19.2.8",
         "npm:react@^19.2.8",
         "npm:typescript@~6.0.2",
         "npm:vite@^8.3.0"
-      ]
+      ],
+      "overrides": {
+        "@tanstack/openai-base": "0.10.12"
+      }
     }
   }
 }
