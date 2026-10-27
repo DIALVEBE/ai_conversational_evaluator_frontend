@@ -1,7 +1,7 @@
 import type { AppUser, StudentLiveTalk, StudentAttempt, StudentAttemptDetail } from '../types';
-import { MetricCard } from '../components/shared';
+import { WorkspaceSidebar, type WorkspaceMenuGroup } from '../components/workspace-sidebar';
 import { getApiErrorMessage } from '../lib/errors';
-import { formatAttemptStatus, formatAverageScore, formatDateTime, getResultScoreLabel, getResultScoreValue, getStudentAttemptNumbers } from '../lib/result-formatters';
+import { formatAttemptStatus, formatDateTime, getResultScoreLabel, getResultScoreValue, getStudentAttemptNumbers } from '../lib/result-formatters';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { VoiceChat } from './voice-chat';
@@ -10,7 +10,7 @@ import sessionImage from '../assets/virtualchallenge-session.png';
 export function StudentHome(props: {
   user: AppUser | null;
 }) {
-  const [activeTab, setActiveTab] = useState<"live-talks" | "history">("live-talks");
+  const [activeItem, setActiveItem] = useState('live-talks.available');
   const [liveTalks, setLiveTalks] = useState<StudentLiveTalk[]>([]);
   const [attempts, setAttempts] = useState<StudentAttempt[]>([]);
   const [selectedLiveTalkId, setSelectedLiveTalkId] = useState("");
@@ -46,84 +46,50 @@ export function StudentHome(props: {
     };
   }, []);
 
-  const selectedLiveTalk = liveTalks.find((liveTalk) => liveTalk.id === selectedLiveTalkId) ?? null;
   const isScheduled = (liveTalk: StudentLiveTalk) => Boolean(
     currentTime > 0 && liveTalk.opensAt && new Date(liveTalk.opensAt).getTime() > currentTime,
   );
   const scheduledLiveTalks = liveTalks.filter(isScheduled);
   const availableLiveTalks = liveTalks.filter((liveTalk) => !isScheduled(liveTalk));
+  const visibleLiveTalks = activeItem === 'live-talks.pending' ? scheduledLiveTalks : availableLiveTalks;
+  const selectedLiveTalk = visibleLiveTalks.find((liveTalk) => liveTalk.id === selectedLiveTalkId) ?? visibleLiveTalks[0] ?? null;
+  const menuGroups: WorkspaceMenuGroup[] = [
+    { id: 'live-talks', label: 'Live Talks', count: String(liveTalks.length), items: [
+      { id: 'live-talks.available', label: 'Disponibles' }, { id: 'live-talks.pending', label: 'Pendientes' },
+    ] },
+    { id: 'history', label: 'Histórico', count: String(attempts.length), items: [
+      { id: 'history.attempts', label: 'Mis intentos' },
+    ] },
+  ];
 
   return (
     <section className="role-workspace student-workspace">
-      <section className="workspace-hero student-hero">
-        <div className="hero-copy">
-          <p className="eyebrow">Estudiante</p>
-          <h1>{props.user?.name ?? "Panel estudiante"}</h1>
-          <p>
-            Entra a un live talk activo, conversa por voz y revisa tu evidencia cuando
-            finalice la evaluación.
-          </p>
-        </div>
-        <div className="hero-media">
-          <img src={sessionImage} alt="" />
-        </div>
-        <div className="hero-badge">
-          <span>Intentos</span>
-          <strong>{attempts.length}</strong>
-        </div>
-      </section>
-
-      <section className="metric-grid compact-metrics">
-        <MetricCard label="Live Talks" value={String(liveTalks.length)} detail="Activos para ti" />
-        <MetricCard
-          label="Completados"
-          value={String(attempts.filter((attempt) => attempt.status === "completed").length)}
-          detail="Conversaciones cerradas"
-        />
-        <MetricCard
-          label="Evaluados"
-          value={String(attempts.filter((attempt) => attempt.evaluationStatus === "completed").length)}
-          detail="Con rúbrica disponible"
-        />
-        <MetricCard
-          label="Promedio"
-          value={formatAverageScore(attempts)}
-          detail="Notas calculadas"
-        />
-      </section>
-
-      <nav className="role-tabs student-tabs" aria-label="Navegación estudiante">
-        <button type="button" className={activeTab === "live-talks" ? "active" : ""} onClick={() => setActiveTab("live-talks")}>
-          Live Talks
-        </button>
-        <button type="button" className={activeTab === "history" ? "active" : ""} onClick={() => setActiveTab("history")}>
-          Histórico <span>{attempts.length}</span>
-        </button>
-      </nav>
-
+      <div className="workspace-layout">
+        <WorkspaceSidebar title="Estudiante" groups={menuGroups} activeItem={activeItem} onSelect={setActiveItem} />
+        <div className="workspace-main">
+          <section className="workspace-hero student-hero">
+            <div className="hero-copy">
+              <p className="eyebrow">Estudiante</p>
+              <h1>{props.user?.name ?? "Panel estudiante"}</h1>
+              <p>Entra a un live talk activo, conversa por voz y revisa tu evidencia cuando finalice la evaluación.</p>
+            </div>
+            <div className="hero-media"><img src={sessionImage} alt="" /></div>
+            <div className="hero-badge"><span>Intentos</span><strong>{attempts.length}</strong></div>
+          </section>
+          <div className="workspace-content-heading"><p className="eyebrow">Estudiante</p><h2>{activeItem === 'live-talks.pending' ? 'Live Talks pendientes' : activeItem === 'history.attempts' ? 'Mis intentos' : 'Live Talks disponibles'}</h2></div>
       {error ? <p className="error-text">{error}</p> : null}
       {isLoading ? <section className="panel"><p>Cargando live talks...</p></section> : null}
-      {!isLoading && activeTab === "live-talks" ? (
+      {!isLoading && activeItem.startsWith('live-talks.') ? (
         <section className="student-live-grid">
           <div className="student-live-sidebar">
             <StudentLiveTalkGroup
-              title="Activos"
-              liveTalks={availableLiveTalks}
-              selectedId={selectedLiveTalkId}
+              title={activeItem === 'live-talks.pending' ? 'Pendientes' : 'Disponibles'}
+              liveTalks={visibleLiveTalks}
+              selectedId={selectedLiveTalk?.id ?? ''}
               now={currentTime}
               onSelect={setSelectedLiveTalkId}
-              emptyMessage="No hay live talks disponibles ahora."
+              emptyMessage={activeItem === 'live-talks.pending' ? 'No hay Live Talks pendientes.' : 'No hay Live Talks disponibles ahora.'}
             />
-            {scheduledLiveTalks.length > 0 ? (
-              <StudentLiveTalkGroup
-                title="Pendientes"
-                liveTalks={scheduledLiveTalks}
-                selectedId={selectedLiveTalkId}
-                now={currentTime}
-                onSelect={setSelectedLiveTalkId}
-                emptyMessage=""
-              />
-            ) : null}
           </div>
 
           {selectedLiveTalk ? (
@@ -139,7 +105,9 @@ export function StudentHome(props: {
           )}
         </section>
       ) : null}
-      {!isLoading && activeTab === "history" ? <StudentAttemptsPanel attempts={attempts} /> : null}
+      {!isLoading && activeItem === 'history.attempts' ? <StudentAttemptsPanel attempts={attempts} /> : null}
+        </div>
+      </div>
     </section>
   );
 }

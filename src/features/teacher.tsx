@@ -1,5 +1,6 @@
 import type { AppUser, ConfirmationState, TeacherAcademicSpace, LiveTalkStatus, TeacherLiveTalk, TeacherResultAttempt, TeacherAttemptDetail } from '../types';
-import { MetricCard, AdminRow } from '../components/shared';
+import { AdminRow } from '../components/shared';
+import { WorkspaceSidebar, type WorkspaceMenuGroup } from '../components/workspace-sidebar';
 import { getApiErrorMessage } from '../lib/errors';
 import { formatAttemptStatus, getResultScoreLabel, getResultScoreValue } from '../lib/result-formatters';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -11,7 +12,8 @@ import tutorImage from '../assets/virtualchallenge-tutor.png';
 export function TeacherHome(props: {
   user: AppUser | null;
 }) {
-  const [activeSection, setActiveSection] = useState<"live-talks" | "resultados">("live-talks");
+  const [activeItem, setActiveItem] = useState('live-talks.list');
+  const [newTalkRequest, setNewTalkRequest] = useState(0);
   const [spaces, setSpaces] = useState<TeacherAcademicSpace[]>([]);
   const [liveTalks, setLiveTalks] = useState<TeacherLiveTalk[]>([]);
   const [error, setError] = useState("");
@@ -42,72 +44,52 @@ export function TeacherHome(props: {
     return () => window.clearInterval(refreshTimer);
   }, []);
 
+  const menuGroups: WorkspaceMenuGroup[] = [
+    { id: 'live-talks', label: 'Live Talks', count: String(liveTalks.length), items: [
+      { id: 'live-talks.list', label: 'Listar Live Talks' }, { id: 'live-talks.create', label: 'Crear Live Talk' },
+    ] },
+    { id: 'resultados', label: 'Resultados', items: [{ id: 'resultados.history', label: 'Histórico de resultados' }] },
+  ];
+
+  function selectItem(item: string) {
+    if (item === 'live-talks.create') setNewTalkRequest((request) => request + 1);
+    setActiveItem(item);
+  }
+
   return (
     <section className="role-workspace">
-      <section className="workspace-hero teacher-hero">
-        <div className="hero-copy">
-          <p className="eyebrow">Docente</p>
-          <h1>{props.user?.name ?? "Panel docente"}</h1>
-          <p>
-            Diseña evaluaciones conversacionales, activa sesiones para tus espacios y revisa
-            evidencia con trazabilidad.
-          </p>
-        </div>
-        <div className="hero-media">
-          <img src={tutorImage} alt="" />
-        </div>
-        <div className="hero-badge">
-          <span>Espacios</span>
-          <strong>{spaces.length}</strong>
-        </div>
-      </section>
-
-      <nav className="role-tabs" aria-label="Navegación docente">
-        <button
-          type="button"
-          className={activeSection === "live-talks" ? "active" : ""}
-          onClick={() => setActiveSection("live-talks")}
-        >
-          Live Talks
-        </button>
-        <button
-          type="button"
-          className={activeSection === "resultados" ? "active" : ""}
-          onClick={() => setActiveSection("resultados")}
-        >
-          Resultados
-        </button>
-      </nav>
-
-      <section className="metric-grid compact-metrics">
-        <MetricCard label="Espacios" value={String(spaces.length)} detail="Asignados al docente" />
-        <MetricCard label="Live Talks" value={String(liveTalks.length)} detail="Creados en tus espacios" />
-        <MetricCard
-          label="Activos"
-          value={String(liveTalks.filter((liveTalk) => liveTalk.status === "active").length)}
-          detail="Disponibles para estudiantes"
-        />
-        <MetricCard
-          label="Cerrados"
-          value={String(liveTalks.filter((liveTalk) => liveTalk.status === "closed").length)}
-          detail="Listos para seguimiento"
-        />
-      </section>
-
+      <div className="workspace-layout">
+        <WorkspaceSidebar title="Docente" groups={menuGroups} activeItem={activeItem} onSelect={selectItem} />
+        <div className="workspace-main">
+          <section className="workspace-hero teacher-hero">
+            <div className="hero-copy">
+              <p className="eyebrow">Docente</p>
+              <h1>{props.user?.name ?? "Panel docente"}</h1>
+              <p>Diseña evaluaciones conversacionales, activa sesiones para tus espacios y revisa evidencia con trazabilidad.</p>
+            </div>
+            <div className="hero-media"><img src={tutorImage} alt="" /></div>
+            <div className="hero-badge"><span>Espacios</span><strong>{spaces.length}</strong></div>
+          </section>
+          <div className="workspace-content-heading"><p className="eyebrow">Docente</p><h2>{activeItem === 'live-talks.create' ? 'Crear Live Talk' : activeItem === 'live-talks.list' ? 'Live Talks' : 'Resultados'}</h2></div>
       {error ? <p className="error-text">{error}</p> : null}
       {isLoading ? <section className="panel"><p>Cargando datos docente...</p></section> : null}
-      {!isLoading && activeSection === "live-talks" ? (
+      {!isLoading && activeItem.startsWith('live-talks.') ? (
         <TeacherLiveTalkPanel
+          key={newTalkRequest}
           spaces={spaces}
           liveTalks={liveTalks}
           onChanged={loadTeacherData}
           confirm={setConfirmation}
           showError={setError}
+          view={activeItem === 'live-talks.create' ? 'create' : 'list'}
+          onViewChange={(view) => setActiveItem(`live-talks.${view}`)}
         />
       ) : null}
-      {!isLoading && activeSection === "resultados" ? (
+      {!isLoading && activeItem === 'resultados.history' ? (
         <TeacherResultsPanel liveTalks={liveTalks} />
       ) : null}
+        </div>
+      </div>
 
       {confirmation ? (
         <ConfirmDialog confirmation={confirmation} onClose={() => setConfirmation(null)} />
@@ -122,6 +104,8 @@ function TeacherLiveTalkPanel(props: {
   onChanged: () => Promise<void>;
   confirm: (confirmation: ConfirmationState) => void;
   showError: (message: string) => void;
+  view: 'list' | 'create';
+  onViewChange: (view: 'list' | 'create') => void;
 }) {
   const firstSpaceId = props.spaces[0]?.id ?? "";
   const [editingLiveTalkId, setEditingLiveTalkId] = useState<string | null>(null);
@@ -159,6 +143,7 @@ function TeacherLiveTalkPanel(props: {
       generalTopic: liveTalk.generalTopic,
       topics: liveTalk.topics,
     });
+    props.onViewChange('create');
   }
 
   function addTopic() {
@@ -196,6 +181,7 @@ function TeacherLiveTalkPanel(props: {
       }
 
       resetForm();
+      props.onViewChange('list');
       await props.onChanged();
     } catch (unknownError) {
       setError(getApiErrorMessage(unknownError));
@@ -231,8 +217,8 @@ function TeacherLiveTalkPanel(props: {
   }
 
   return (
-    <section className="admin-grid">
-      <div className="panel">
+    <section className="admin-grid teacher-live-talk-panel">
+      {props.view === 'list' ? <div className="panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Live Talks</p>
@@ -270,9 +256,9 @@ function TeacherLiveTalkPanel(props: {
             />
           ))}
         </div>
-      </div>
+      </div> : null}
 
-      <div className="panel">
+      {props.view === 'create' ? <div className="panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Configuración</p>
@@ -322,10 +308,10 @@ function TeacherLiveTalkPanel(props: {
             <button type="submit" disabled={props.spaces.length === 0}>
               {editingLiveTalkId ? "Guardar live talk" : "Crear live talk"}
             </button>
-            {editingLiveTalkId ? <button type="button" className="secondary-button" onClick={resetForm}>Cancelar</button> : null}
+            {editingLiveTalkId ? <button type="button" className="secondary-button" onClick={() => { resetForm(); props.onViewChange('list'); }}>Cancelar</button> : null}
           </div>
         </form>
-      </div>
+      </div> : null}
     </section>
   );
 }

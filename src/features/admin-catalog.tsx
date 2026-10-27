@@ -16,9 +16,11 @@ export function AdminUsersPanel(props: {
   onChanged: () => Promise<void>;
   confirm: (confirmation: ConfirmationState) => void;
   showError: (message: string) => void;
+  navigationAction?: 'create';
+  onNavigationClose: () => void;
 }) {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const showForm = props.navigationAction === 'create' || Boolean(editingUserId);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -39,7 +41,6 @@ export function AdminUsersPanel(props: {
 
   function resetForm() {
     setEditingUserId(null);
-    setIsFormOpen(false);
     setError("");
     setForm({
       name: "",
@@ -49,6 +50,11 @@ export function AdminUsersPanel(props: {
       documentNumber: "",
       institutionalCode: "",
     });
+  }
+
+  function closeForm() {
+    resetForm();
+    props.onNavigationClose();
   }
 
   function editUser(user: AdminUser) {
@@ -61,7 +67,6 @@ export function AdminUsersPanel(props: {
       documentNumber: user.documentNumber ?? "",
       institutionalCode: user.institutionalCode ?? "",
     });
-    setIsFormOpen(true);
   }
 
   async function saveUser(event: FormEvent<HTMLFormElement>) {
@@ -82,7 +87,7 @@ export function AdminUsersPanel(props: {
         await api.post("/admin/users", form);
       }
 
-      resetForm();
+      closeForm();
       await props.onChanged();
     } catch {
       setError("No fue posible guardar el usuario. Revisa correo, documento o código.");
@@ -137,13 +142,12 @@ export function AdminUsersPanel(props: {
 
   return (
     <section className="admin-grid admin-table-workspace">
-      <div className="panel">
+      {!showForm ? <div className="panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Usuarios</p>
             <h2>Gestión de usuarios</h2>
           </div>
-          <button type="button" onClick={() => { resetForm(); setIsFormOpen(true); }}>Crear usuario</button>
         </div>
         <div className="admin-filter-bar">
           <label className="filter-search-field">
@@ -180,7 +184,7 @@ export function AdminUsersPanel(props: {
           isLoading={props.isLoading}
           onPageChange={props.onPageChange}
         />
-      </div>
+      </div> : null}
 
       {temporaryCredential ? (
         <ModalDialog
@@ -216,7 +220,8 @@ export function AdminUsersPanel(props: {
         </ModalDialog>
       ) : null}
 
-      {isFormOpen ? <ModalDialog title={editingUserId ? "Editar usuario" : "Crear usuario"} onClose={resetForm}>
+      {showForm ? <div className="panel admin-form-page">
+        <div className="section-heading"><div><p className="eyebrow">Usuarios</p><h2>{editingUserId ? "Editar usuario" : "Crear usuario"}</h2></div></div>
         <form className="form-stack" onSubmit={saveUser}>
           <label>
             Nombre
@@ -251,10 +256,10 @@ export function AdminUsersPanel(props: {
           {error ? <p className="error-text">{error}</p> : null}
           <div className="inline-form">
             <button type="submit">{editingUserId ? "Guardar usuario" : "Crear usuario"}</button>
-            {editingUserId ? <button type="button" className="secondary-button" onClick={resetForm}>Cancelar</button> : null}
+            <button type="button" className="secondary-button" onClick={closeForm}>Cancelar</button>
           </div>
         </form>
-      </ModalDialog> : null}
+      </div> : null}
     </section>
   );
 }
@@ -269,9 +274,11 @@ export function AdminProgramsPanel(props: {
   onChanged: () => Promise<void>;
   confirm: (confirmation: ConfirmationState) => void;
   showError: (message: string) => void;
+  navigationAction?: 'create';
+  onNavigationClose: () => void;
 }) {
   const [editingProgramId, setEditingProgramId] = useState<string | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  const showForm = props.navigationAction === 'create' || Boolean(editingProgramId);
   const [form, setForm] = useState({ code: "", name: "", description: "", isActive: true });
   const [error, setError] = useState("");
   const [filterDraft, setFilterDraft] = useState(props.filters);
@@ -279,9 +286,13 @@ export function AdminProgramsPanel(props: {
 
   function resetForm() {
     setEditingProgramId(null);
-    setIsFormOpen(false);
     setError("");
     setForm({ code: "", name: "", description: "", isActive: true });
+  }
+
+  function closeForm() {
+    resetForm();
+    props.onNavigationClose();
   }
 
   function editProgram(program: AcademicProgram) {
@@ -292,7 +303,6 @@ export function AdminProgramsPanel(props: {
       description: program.description ?? "",
       isActive: program.isActive,
     });
-    setIsFormOpen(true);
   }
 
   async function saveProgram(event: FormEvent<HTMLFormElement>) {
@@ -306,7 +316,7 @@ export function AdminProgramsPanel(props: {
         await api.post("/admin/programs", form);
       }
 
-      resetForm();
+      closeForm();
       await props.onChanged();
     } catch {
       setError("No fue posible guardar el programa. Revisa si el código ya existe.");
@@ -333,13 +343,12 @@ export function AdminProgramsPanel(props: {
 
   return (
     <section className="admin-grid admin-table-workspace">
-      <div className="panel">
+      {!showForm ? <div className="panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Programas</p>
             <h2>Programas académicos</h2>
           </div>
-          <button type="button" onClick={() => { resetForm(); setIsFormOpen(true); }}>Crear programa</button>
         </div>
         <div className="admin-filter-bar">
           <label className="filter-search-field">Buscar programa
@@ -369,9 +378,10 @@ export function AdminProgramsPanel(props: {
           isLoading={props.isLoading}
           onPageChange={props.onPageChange}
         />
-      </div>
+      </div> : null}
 
-      {isFormOpen ? <ModalDialog title={editingProgramId ? "Editar programa" : "Crear programa"} onClose={resetForm}>
+      {showForm ? <div className="panel admin-form-page">
+        <div className="section-heading"><div><p className="eyebrow">Programas</p><h2>{editingProgramId ? "Editar programa" : "Crear programa"}</h2></div></div>
         <form className="form-stack" onSubmit={saveProgram}>
           <label>
             Código
@@ -392,10 +402,10 @@ export function AdminProgramsPanel(props: {
           {error ? <p className="error-text">{error}</p> : null}
           <div className="inline-form">
             <button type="submit">{editingProgramId ? "Guardar programa" : "Crear programa"}</button>
-            {editingProgramId ? <button type="button" className="secondary-button" onClick={resetForm}>Cancelar</button> : null}
+            <button type="button" className="secondary-button" onClick={closeForm}>Cancelar</button>
           </div>
         </form>
-      </ModalDialog> : null}
+      </div> : null}
     </section>
   );
 }
@@ -411,11 +421,15 @@ export function AdminSpacesPanel(props: {
   onChanged: () => Promise<void>;
   confirm: (confirmation: ConfirmationState) => void;
   showError: (message: string) => void;
+  navigationAction?: 'create' | 'assign';
+  editingAssignment?: AdminAssignment | null;
+  onAssignmentSaved?: () => void;
+  onNavigationClose: () => void;
 }) {
   const firstProgramId = props.programs[0]?.id ?? "";
   const [editingSpaceId, setEditingSpaceId] = useState<string | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isAssignmentOpen, setIsAssignmentOpen] = useState(false);
+  const showForm = props.navigationAction === 'create' || Boolean(editingSpaceId);
+  const showAssignment = props.navigationAction === 'assign';
   const [form, setForm] = useState({
     programId: firstProgramId,
     code: "",
@@ -427,9 +441,17 @@ export function AdminSpacesPanel(props: {
   });
   const [assignment, setAssignment] = useState({
     spaceId: "",
-    teacherUserId: "",
-    studentUserId: "",
+    role: "docente" as "docente" | "estudiante",
+    userId: "",
   });
+  useEffect(() => {
+    if (!props.editingAssignment) return;
+    setAssignment({
+      spaceId: props.editingAssignment.targetId,
+      role: props.editingAssignment.relation === "teacher" ? "docente" : "estudiante",
+      userId: props.editingAssignment.userId,
+    });
+  }, [props.editingAssignment]);
   const [error, setError] = useState("");
   const [filterDraft, setFilterDraft] = useState(props.filters);
   useAutoAdminFilter(filterDraft, props.onFilter, filterDraft.search);
@@ -442,7 +464,6 @@ export function AdminSpacesPanel(props: {
 
   function resetForm() {
     setEditingSpaceId(null);
-    setIsFormOpen(false);
     setError("");
     setForm({
       programId: firstProgramId,
@@ -453,6 +474,15 @@ export function AdminSpacesPanel(props: {
       semester: "1",
       isActive: true,
     });
+  }
+
+  function closeForm() {
+    resetForm();
+    props.onNavigationClose();
+  }
+
+  function closeAssignment() {
+    props.onNavigationClose();
   }
 
   function editSpace(space: AcademicSpace) {
@@ -466,7 +496,6 @@ export function AdminSpacesPanel(props: {
       semester: String(space.semester ?? 1),
       isActive: space.isActive,
     });
-    setIsFormOpen(true);
   }
 
   async function saveSpace(event: FormEvent<HTMLFormElement>) {
@@ -486,7 +515,7 @@ export function AdminSpacesPanel(props: {
         await api.post("/admin/academic-spaces", payload);
       }
 
-      resetForm();
+      closeForm();
       await props.onChanged();
     } catch {
       setError("No fue posible guardar el espacio académico.");
@@ -512,34 +541,32 @@ export function AdminSpacesPanel(props: {
   }
 
   async function assignTeacher() {
-    if (!assignment.spaceId || !assignment.teacherUserId) return;
-    await api.post(`/admin/academic-spaces/${assignment.spaceId}/teachers`, {
-      teacherUserId: assignment.teacherUserId,
-    });
-    await props.onChanged();
-    setIsAssignmentOpen(false);
-  }
-
-  async function assignStudent() {
-    if (!assignment.spaceId || !assignment.studentUserId) return;
-    await api.post(`/admin/academic-spaces/${assignment.spaceId}/students`, {
-      studentUserId: assignment.studentUserId,
-    });
-    await props.onChanged();
-    setIsAssignmentOpen(false);
+    if (!assignment.spaceId || !assignment.userId) return;
+    setError("");
+    try {
+      const isTeacher = assignment.role === "docente";
+      await api.post(`/admin/academic-spaces/${assignment.spaceId}/${isTeacher ? "teachers" : "students"}`, {
+        [isTeacher ? "teacherUserId" : "studentUserId"]: assignment.userId,
+      });
+      const previous = props.editingAssignment;
+      if (previous && (previous.targetId !== assignment.spaceId || previous.relation !== (isTeacher ? "teacher" : "student"))) {
+        await api.delete(`/admin/academic-spaces/${previous.targetId}/${previous.relation === "teacher" ? "teachers" : "students"}/${previous.userId}`);
+      }
+      await props.onChanged();
+      props.onAssignmentSaved?.();
+      closeAssignment();
+    } catch (error) {
+      setError(getApiErrorMessage(error));
+    }
   }
 
   return (
     <section className="admin-grid admin-table-workspace">
-      <div className="panel">
+      {!showForm && !showAssignment ? <div className="panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Espacios</p>
             <h2>Espacios académicos</h2>
-          </div>
-          <div className="inline-form">
-            <button type="button" onClick={() => { resetForm(); setIsFormOpen(true); }}>Crear espacio</button>
-            <button type="button" className="secondary-button" onClick={() => setIsAssignmentOpen(true)}>Asignar usuario</button>
           </div>
         </div>
         <div className="admin-filter-bar">
@@ -576,9 +603,10 @@ export function AdminSpacesPanel(props: {
           isLoading={props.isLoading}
           onPageChange={props.onPageChange}
         />
-      </div>
+      </div> : null}
 
-      {isFormOpen ? <ModalDialog title={editingSpaceId ? "Editar espacio" : "Crear espacio"} onClose={resetForm}>
+      {showForm ? <div className="panel admin-form-page">
+        <div className="section-heading"><div><p className="eyebrow">Espacios</p><h2>{editingSpaceId ? "Editar espacio" : "Crear espacio"}</h2></div></div>
           <form className="form-stack" onSubmit={saveSpace}>
             <label>
               Programa
@@ -619,65 +647,56 @@ export function AdminSpacesPanel(props: {
               <button type="submit" disabled={props.programs.length === 0}>
                 {editingSpaceId ? "Guardar espacio" : "Crear espacio"}
               </button>
-              {editingSpaceId ? <button type="button" className="secondary-button" onClick={resetForm}>Cancelar</button> : null}
+              <button type="button" className="secondary-button" onClick={closeForm}>Cancelar</button>
             </div>
           </form>
-      </ModalDialog> : null}
+      </div> : null}
 
-      {isAssignmentOpen ? <ModalDialog title="Vincular usuarios al espacio" onClose={() => setIsAssignmentOpen(false)}>
+      {showAssignment ? <div className="panel admin-form-page">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Asignaciones</p>
-              <h2>Vincular usuarios</h2>
+              <h2>{props.editingAssignment ? "Corregir asignación" : "Vincular usuario"}</h2>
             </div>
           </div>
           <div className="form-stack">
             <AdminSpacePicker
               value={assignment.spaceId}
+              selectedLabel={props.editingAssignment?.targetName}
               onChange={(spaceId) => setAssignment((current) => ({ ...current, spaceId }))}
             />
+            <label>Rol en el espacio
+              <select value={assignment.role} onChange={(event) => setAssignment((current) => ({ ...current, role: event.target.value as "docente" | "estudiante", userId: "" }))}>
+                <option value="docente">Docente</option><option value="estudiante">Estudiante</option>
+              </select>
+            </label>
+            <AdminUserPicker role={assignment.role} value={assignment.userId} selectedLabel={props.editingAssignment?.userName} onChange={(userId) => setAssignment((current) => ({ ...current, userId }))} />
             <div className="inline-form">
-              <AdminUserPicker
-                role="docente"
-                value={assignment.teacherUserId}
-                onChange={(teacherUserId) => setAssignment((current) => ({ ...current, teacherUserId }))}
-              />
-              <button type="button" onClick={() => void assignTeacher()}>Asignar</button>
+              <button type="button" disabled={!assignment.spaceId || !assignment.userId} onClick={() => void assignTeacher()}>{props.editingAssignment ? "Guardar cambio" : "Asignar usuario"}</button>
             </div>
-            <div className="inline-form">
-              <AdminUserPicker
-                role="estudiante"
-                value={assignment.studentUserId}
-                onChange={(studentUserId) => setAssignment((current) => ({ ...current, studentUserId }))}
-              />
-              <button type="button" onClick={() => void assignStudent()}>Asignar</button>
-            </div>
+            {error ? <p className="error-text">{error}</p> : null}
+            <button type="button" className="secondary-button" onClick={closeAssignment}>Volver a espacios</button>
           </div>
-      </ModalDialog> : null}
+      </div> : null}
     </section>
   );
 }
 
 export function AdminAssignmentsPanel(props: {
-  programAssignments: AdminAssignment[];
-  programPagination: PageMetadata;
-  onProgramPageChange: (page: number) => void;
+  view: 'user' | 'space';
   spaceAssignments: AdminAssignment[];
   spacePagination: PageMetadata;
   onSpacePageChange: (page: number) => void;
   programOptions: ProgramOption[];
-  programFilters: AdminAssignmentFilters;
-  onProgramFilter: (filters: AdminAssignmentFilters) => void;
   spaceFilters: AdminAssignmentFilters;
   onSpaceFilter: (filters: AdminAssignmentFilters) => void;
   isLoading: boolean;
   onChanged: () => Promise<void>;
   confirm: (confirmation: ConfirmationState) => void;
   showError: (message: string) => void;
+  onEdit: (assignment: AdminAssignment) => void;
 }) {
-  const [programDraft, setProgramDraft] = useState(props.programFilters);
   const [spaceDraft, setSpaceDraft] = useState(props.spaceFilters);
-  useAutoAdminFilter(programDraft, props.onProgramFilter, programDraft.search);
   useAutoAdminFilter(spaceDraft, props.onSpaceFilter, spaceDraft.search);
 
   async function removeAssignment(assignment: AdminAssignment) {
@@ -709,28 +728,28 @@ export function AdminAssignmentsPanel(props: {
 
   return (
     <section className="admin-grid admin-assignment-grid">
-      <div className="panel">
+      {props.view === 'user' ? <div className="panel">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Programas</p>
-            <h2>Estudiantes por programa</h2>
+            <p className="eyebrow">Asignaciones</p>
+            <h2>Asignaciones por usuario</h2>
           </div>
         </div>
         <div className="admin-filter-bar">
-          <label className="filter-search-field">Buscar estudiante
-            <input value={programDraft.search} onChange={(event) => setProgramDraft({ ...programDraft, search: event.target.value })} placeholder="Nombre, cédula o correo" />
+          <label className="filter-search-field">Buscar usuario
+            <input value={spaceDraft.search} onChange={(event) => { const next = { ...spaceDraft, search: event.target.value }; setSpaceDraft(next); }} placeholder="Nombre, cédula o correo" />
           </label>
-          <label>Programa
-            <select value={programDraft.programId} onChange={(event) => { const next = { ...programDraft, programId: event.target.value }; setProgramDraft(next); props.onProgramFilter(next); }}>
-              <option value="">Todos</option>{props.programOptions.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
+          <label>Tipo de usuario
+            <select value={spaceDraft.relation} onChange={(event) => { const next = { ...spaceDraft, relation: event.target.value }; setSpaceDraft(next); props.onSpaceFilter(next); }}>
+              <option value="">Todos</option><option value="teacher">Docentes</option><option value="student">Estudiantes</option>
             </select>
           </label>
-          <FilterActions onClear={() => { const cleared = { search: "", programId: "", spaceId: "", relation: "" }; setProgramDraft(cleared); props.onProgramFilter(cleared); }} />
+          <FilterActions onClear={() => { const cleared = { search: "", programId: "", spaceId: "", relation: "" }; setSpaceDraft(cleared); props.onSpaceFilter(cleared); }} />
         </div>
-        <AssignmentList assignments={props.programAssignments} pagination={props.programPagination} isLoading={props.isLoading} onPageChange={props.onProgramPageChange} onRemove={removeAssignment} />
-      </div>
+        <AssignmentList assignments={props.spaceAssignments} pagination={props.spacePagination} isLoading={props.isLoading} onPageChange={props.onSpacePageChange} onRemove={removeAssignment} onEdit={props.view === 'user' ? props.onEdit : undefined} />
+      </div> : null}
 
-      <div className="panel">
+      {props.view === 'space' ? <div className="panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Espacios</p>
@@ -754,8 +773,8 @@ export function AdminAssignmentsPanel(props: {
           </label>
           <FilterActions onClear={() => { const cleared = { search: "", programId: "", spaceId: "", relation: "" }; setSpaceDraft(cleared); props.onSpaceFilter(cleared); }} />
         </div>
-        <AssignmentList assignments={props.spaceAssignments} pagination={props.spacePagination} isLoading={props.isLoading} onPageChange={props.onSpacePageChange} onRemove={removeAssignment} />
-      </div>
+        <AssignmentList assignments={props.spaceAssignments} pagination={props.spacePagination} isLoading={props.isLoading} onPageChange={props.onSpacePageChange} onRemove={removeAssignment} onEdit={props.onEdit} />
+      </div> : null}
     </section>
   );
 }
@@ -795,6 +814,7 @@ function AssignmentList(props: {
   isLoading: boolean;
   onPageChange: (page: number) => void;
   onRemove: (assignment: AdminAssignment) => Promise<void>;
+  onEdit?: (assignment: AdminAssignment) => void;
 }) {
   if (props.assignments.length === 0) {
     return <p className="muted">No hay asignaciones registradas.</p>;
@@ -810,7 +830,10 @@ function AssignmentList(props: {
         { label: "Tipo", render: (assignment) => assignment.relation === "teacher" ? "Docente" : "Estudiante" },
         { label: "Usuario", render: (assignment) => <span className="assignment-user-cell"><strong>{assignment.userName}</strong><small>{assignment.userEmail}</small></span> },
       ]}
-      actions={(assignment) => [{ label: "Desasignar", icon: "remove", onClick: () => void props.onRemove(assignment) }]}
+      actions={(assignment) => [
+        ...(props.onEdit ? [{ label: "Cambiar espacio", icon: "edit" as const, onClick: () => props.onEdit?.(assignment) }] : []),
+        { label: "Desasignar", icon: "remove", onClick: () => void props.onRemove(assignment) },
+      ]}
       pagination={props.pagination}
       isLoading={props.isLoading}
       onPageChange={props.onPageChange}

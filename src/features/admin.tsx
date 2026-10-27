@@ -1,6 +1,6 @@
 import type { AdminSection, PageMetadata, ProgramOption, AdminUserFilters, AdminCatalogFilters, AdminSpaceFilters, AdminAssignmentFilters, AppUser, AdminUser, AcademicProgram, AcademicSpace, AdminSummary, AdminAssignment, ConfirmationState } from '../types';
 import { ADMIN_PAGE_SIZE, EMPTY_PAGE } from '../types';
-import { MetricCard } from '../components/shared';
+import { WorkspaceSidebar, type WorkspaceMenuGroup } from '../components/workspace-sidebar';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { AdminResultsPanel } from './admin-results';
@@ -11,6 +11,7 @@ export function AdminHome(props: {
   user: AppUser | null;
 }) {
   const [activeSection, setActiveSection] = useState<AdminSection>("usuarios");
+  const [activeItem, setActiveItem] = useState('usuarios.list');
   const [summary, setSummary] = useState<AdminSummary>({
     users: 0,
     programs: 0,
@@ -30,10 +31,6 @@ export function AdminHome(props: {
   const [spacesPagination, setSpacesPagination] = useState(EMPTY_PAGE);
   const [spacesPage, setSpacesPage] = useState(1);
   const [spaceFilters, setSpaceFilters] = useState<AdminSpaceFilters>({ search: "", active: "", programId: "" });
-  const [programAssignments, setProgramAssignments] = useState<AdminAssignment[]>([]);
-  const [programAssignmentsPagination, setProgramAssignmentsPagination] = useState(EMPTY_PAGE);
-  const [programAssignmentsPage, setProgramAssignmentsPage] = useState(1);
-  const [programAssignmentFilters, setProgramAssignmentFilters] = useState<AdminAssignmentFilters>({ search: "", programId: "", spaceId: "", relation: "" });
   const [spaceAssignments, setSpaceAssignments] = useState<AdminAssignment[]>([]);
   const [spaceAssignmentsPagination, setSpaceAssignmentsPagination] = useState(EMPTY_PAGE);
   const [spaceAssignmentsPage, setSpaceAssignmentsPage] = useState(1);
@@ -42,6 +39,7 @@ export function AdminHome(props: {
   const [isLoading, setIsLoading] = useState(true);
   const [loadedSections, setLoadedSections] = useState<Set<AdminSection>>(() => new Set());
   const [confirmation, setConfirmation] = useState<ConfirmationState>(null);
+  const [editingAssignment, setEditingAssignment] = useState<AdminAssignment | null>(null);
 
   function showError(message: string) {
     setAdminError(message);
@@ -84,20 +82,17 @@ export function AdminHome(props: {
         setSpacesPage(spacesResponse.data.pagination.page);
         setProgramOptions(programsResponse.data.programs);
       } else if (activeSection === "asignaciones") {
-        const [programResponse, spaceResponse, programsResponse] = await Promise.all([
+        const userView = activeItem === "asignaciones.user";
+        const assignmentParams = userView
+          ? { search: spaceAssignmentFilters.search, relation: spaceAssignmentFilters.relation }
+          : spaceAssignmentFilters;
+        const [spaceResponse, programsResponse] = await Promise.all([
           api.get<{ assignments: AdminAssignment[]; pagination: PageMetadata }>(
             "/admin/assignments",
-            { params: { scope: "program", ...programAssignmentFilters, page: programAssignmentsPage, pageSize: ADMIN_PAGE_SIZE } },
-          ),
-          api.get<{ assignments: AdminAssignment[]; pagination: PageMetadata }>(
-            "/admin/assignments",
-            { params: { scope: "academic_space", ...spaceAssignmentFilters, page: spaceAssignmentsPage, pageSize: ADMIN_PAGE_SIZE } },
+            { params: { scope: "academic_space", ...assignmentParams, page: spaceAssignmentsPage, pageSize: ADMIN_PAGE_SIZE } },
           ),
           api.get<{ programs: ProgramOption[] }>("/admin/programs/options"),
         ]);
-        setProgramAssignments(programResponse.data.assignments);
-        setProgramAssignmentsPagination(programResponse.data.pagination);
-        setProgramAssignmentsPage(programResponse.data.pagination.page);
         setSpaceAssignments(spaceResponse.data.assignments);
         setSpaceAssignmentsPagination(spaceResponse.data.pagination);
         setSpaceAssignmentsPage(spaceResponse.data.pagination.page);
@@ -109,7 +104,7 @@ export function AdminHome(props: {
     } finally {
       setIsLoading(false);
     }
-  }, [activeSection, usersPage, programsPage, spacesPage, programAssignmentsPage, spaceAssignmentsPage, userFilters, programFilters, spaceFilters, programAssignmentFilters, spaceAssignmentFilters]);
+  }, [activeSection, activeItem, usersPage, programsPage, spacesPage, spaceAssignmentsPage, userFilters, programFilters, spaceFilters, spaceAssignmentFilters]);
 
   useEffect(() => {
     void loadAdminData();
@@ -119,105 +114,50 @@ export function AdminHome(props: {
     return () => window.clearInterval(refreshTimer);
   }, [loadAdminData, activeSection]);
 
-  const adminSteps: Array<{
-    id: typeof activeSection;
-    number: string;
-    label: string;
-    summary: string;
-    description: string;
-  }> = [
-    {
-      id: "usuarios",
-      number: "01",
-      label: "Usuarios",
-      summary: `${summary.users} perfiles`,
-      description: "Crea y activa cuentas por rol.",
-    },
-    {
-      id: "programas",
-      number: "02",
-      label: "Programas",
-      summary: `${summary.programs} programas`,
-      description: "Define la estructura académica base.",
-    },
-    {
-      id: "espacios",
-      number: "03",
-      label: "Espacios",
-      summary: `${summary.spaces} espacios`,
-      description: "Conecta materias con programas.",
-    },
-    {
-      id: "asignaciones",
-      number: "04",
-      label: "Asignaciones",
-      summary: `${summary.assignments} vínculos`,
-      description: "Relaciona docentes y estudiantes.",
-    },
-    {
-      id: "historico",
-      number: "05",
-      label: "Histórico",
-      summary: "Notas y evidencia",
-      description: "Consulta resultados auditables.",
-    },
+  const menuGroups: WorkspaceMenuGroup[] = [
+    { id: 'usuarios', label: 'Usuarios', count: String(summary.users), items: [
+      { id: 'usuarios.list', label: 'Listar usuarios' }, { id: 'usuarios.create', label: 'Crear usuario' },
+    ] },
+    { id: 'programas', label: 'Programas', count: String(summary.programs), items: [
+      { id: 'programas.list', label: 'Listar programas' }, { id: 'programas.create', label: 'Crear programa' },
+    ] },
+    { id: 'espacios', label: 'Espacios', count: String(summary.spaces), items: [
+      { id: 'espacios.list', label: 'Listar espacios' }, { id: 'espacios.create', label: 'Crear espacio' },
+    ] },
+    { id: 'asignaciones', label: 'Asignaciones', count: String(summary.assignments), items: [
+      { id: 'asignaciones.assign', label: 'Asignar usuario' },
+      { id: 'asignaciones.user', label: 'Por usuario' }, { id: 'asignaciones.space', label: 'Por espacio' },
+    ] },
+    { id: 'historico', label: 'Histórico', items: [{ id: 'historico.results', label: 'Resultados' }] },
   ];
-  const activeStep = adminSteps.find((step) => step.id === activeSection) ?? adminSteps[0];
+  const activeLabel = menuGroups.flatMap((group) => group.items).find((item) => item.id === activeItem)?.label ?? 'Usuarios';
+
+  function selectItem(item: string) {
+    setActiveItem(item);
+    setActiveSection(item === 'asignaciones.assign' ? 'espacios' : item.split('.')[0] as AdminSection);
+  }
 
   return (
     <section className="role-workspace admin-workspace">
-      <section className="workspace-hero admin-control-hero">
-        <div className="hero-copy">
-          <p className="eyebrow">Administración</p>
-          <h1>Centro de configuración académica</h1>
-          <p>
-            Ordena la operación desde la base institucional hasta la evidencia de cada
-            evaluación.
-          </p>
-        </div>
-        <div className="hero-media">
-          <img src={academyImage} alt="" />
-        </div>
-        <div className="hero-badge">
-          <span>Rol activo</span>
-          <strong>{props.user?.profile?.role ?? "admin"}</strong>
-        </div>
-      </section>
-
-      <section className="metric-grid">
-        <MetricCard label="Usuarios" value={String(summary.users)} detail="Perfiles registrados" />
-        <MetricCard label="Programas" value={String(summary.programs)} detail="Programas activos o inactivos" />
-        <MetricCard label="Espacios" value={String(summary.spaces)} detail="Espacios académicos" />
-        <MetricCard label="Asignaciones" value={String(summary.assignments)} detail="Vínculos académicos" />
-      </section>
-
-      <nav className="workflow-steps" aria-label="Flujo administrativo">
-        {adminSteps.map((step) => (
-          <button
-            key={step.id}
-            type="button"
-            className={`workflow-step ${activeSection === step.id ? "active" : ""}`}
-            onClick={() => setActiveSection(step.id)}
-          >
-            <span>{step.number}</span>
-            <strong>{step.label}</strong>
-            <em>{step.summary}</em>
-            <small>{step.description}</small>
-          </button>
-        ))}
-      </nav>
-
-      <section className="active-workflow-heading">
-        <div>
-          <p className="eyebrow">{activeStep.number} · {activeStep.label}</p>
-          <h2>{activeStep.description}</h2>
-        </div>
-      </section>
+      <div className="workspace-layout">
+        <WorkspaceSidebar title="Administración" groups={menuGroups} activeItem={activeItem} onSelect={selectItem} />
+        <div className="workspace-main">
+          <section className="workspace-hero admin-control-hero">
+            <div className="hero-copy">
+              <p className="eyebrow">Administración</p>
+              <h1>Centro de configuración académica</h1>
+              <p>Ordena la operación desde la base institucional hasta la evidencia de cada evaluación.</p>
+            </div>
+            <div className="hero-media"><img src={academyImage} alt="" /></div>
+            <div className="hero-badge"><span>Rol activo</span><strong>{props.user?.profile?.role ?? "admin"}</strong></div>
+          </section>
+          <div className="workspace-content-heading"><p className="eyebrow">Administración</p><h2>{activeLabel}</h2></div>
 
       {adminError ? <p className="error-text">{adminError}</p> : null}
       {isLoading && !loadedSections.has(activeSection) ? <section className="panel"><p>Cargando sección...</p></section> : null}
       {loadedSections.has(activeSection) && activeSection === "usuarios" ? (
         <AdminUsersPanel
+          key={activeItem}
           users={users}
           pagination={usersPagination}
           isLoading={isLoading}
@@ -228,10 +168,13 @@ export function AdminHome(props: {
           onChanged={loadAdminData}
           confirm={setConfirmation}
           showError={showError}
+          navigationAction={activeItem === 'usuarios.create' ? 'create' : undefined}
+          onNavigationClose={() => selectItem('usuarios.list')}
         />
       ) : null}
       {loadedSections.has(activeSection) && activeSection === "programas" ? (
         <AdminProgramsPanel
+          key={activeItem}
           programs={programs}
           pagination={programsPagination}
           isLoading={isLoading}
@@ -241,10 +184,13 @@ export function AdminHome(props: {
           onChanged={loadAdminData}
           confirm={setConfirmation}
           showError={showError}
+          navigationAction={activeItem === 'programas.create' ? 'create' : undefined}
+          onNavigationClose={() => selectItem('programas.list')}
         />
       ) : null}
       {loadedSections.has(activeSection) && activeSection === "espacios" ? (
         <AdminSpacesPanel
+          key={activeItem}
           academicSpaces={academicSpaces}
           programs={programOptions}
           pagination={spacesPagination}
@@ -255,30 +201,41 @@ export function AdminHome(props: {
           onChanged={loadAdminData}
           confirm={setConfirmation}
           showError={showError}
+          navigationAction={activeItem === 'espacios.create' ? 'create' : activeItem === 'asignaciones.assign' ? 'assign' : undefined}
+          editingAssignment={editingAssignment}
+          onAssignmentSaved={() => setEditingAssignment(null)}
+          onNavigationClose={() => {
+            if (activeItem === 'asignaciones.assign') {
+              setEditingAssignment(null);
+              selectItem('asignaciones.user');
+            } else selectItem('espacios.list');
+          }}
         />
       ) : null}
       {loadedSections.has(activeSection) && activeSection === "asignaciones" ? (
         <AdminAssignmentsPanel
-          programAssignments={programAssignments}
-          programPagination={programAssignmentsPagination}
-          onProgramPageChange={setProgramAssignmentsPage}
           spaceAssignments={spaceAssignments}
           spacePagination={spaceAssignmentsPagination}
           onSpacePageChange={setSpaceAssignmentsPage}
           programOptions={programOptions}
-          programFilters={programAssignmentFilters}
-          onProgramFilter={(filters) => { setProgramAssignmentFilters(filters); setProgramAssignmentsPage(1); }}
           spaceFilters={spaceAssignmentFilters}
           onSpaceFilter={(filters) => { setSpaceAssignmentFilters(filters); setSpaceAssignmentsPage(1); }}
           isLoading={isLoading}
           onChanged={loadAdminData}
           confirm={setConfirmation}
           showError={showError}
+          view={activeItem === 'asignaciones.space' ? 'space' : 'user'}
+          onEdit={(assignment) => {
+            setEditingAssignment(assignment);
+            selectItem('asignaciones.assign');
+          }}
         />
       ) : null}
       {activeSection === "historico" ? (
         <AdminResultsPanel />
       ) : null}
+        </div>
+      </div>
 
       {confirmation ? (
         <ConfirmDialog

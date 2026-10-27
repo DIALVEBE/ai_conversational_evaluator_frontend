@@ -416,19 +416,21 @@ function buildAdminResultParams(filters: {
 }
 
 export function AdminUserPicker(props: {
-  role: AppRole;
+  role: AppRole | "all";
   value: string;
+  selectedLabel?: string;
   onChange: (value: string) => void;
 }) {
   return (
     <RemoteAdminPicker
-      label={props.role === "docente" ? "Docente" : "Estudiante"}
+      label={props.role === "docente" ? "Docente" : props.role === "estudiante" ? "Estudiante" : "Usuario"}
       placeholder="Nombre, cédula o correo"
       value={props.value}
+      selectedLabel={props.selectedLabel}
       onChange={props.onChange}
       loadOptions={async (search) => {
         const response = await api.get<{ users: AdminUser[] }>("/admin/users", {
-          params: { role: props.role, search, pageSize: 10 },
+          params: { role: props.role === "all" ? undefined : props.role, search, pageSize: 10 },
         });
         return response.data.users.map((user) => ({ id: user.id, label: `${user.name} · ${user.email}` }));
       }}
@@ -438,6 +440,7 @@ export function AdminUserPicker(props: {
 
 export function AdminSpacePicker(props: {
   value: string;
+  selectedLabel?: string;
   onChange: (value: string) => void;
   programId?: string;
 }) {
@@ -446,6 +449,7 @@ export function AdminSpacePicker(props: {
       label="Espacio académico"
       placeholder="Buscar espacio"
       value={props.value}
+      selectedLabel={props.selectedLabel}
       onChange={props.onChange}
       programId={props.programId}
       loadOptions={async (search) => {
@@ -462,13 +466,16 @@ function RemoteAdminPicker(props: {
   label: string;
   placeholder: string;
   value: string;
+  selectedLabel?: string;
   onChange: (value: string) => void;
   loadOptions: (search: string) => Promise<SearchOption[]>;
   programId?: string;
 }) {
   const [search, setSearch] = useState("");
   const [options, setOptions] = useState<SearchOption[]>([]);
-  const [selected, setSelected] = useState<SearchOption | null>(null);
+  const [selected, setSelected] = useState<SearchOption | null>(() => props.value && props.selectedLabel
+    ? { id: props.value, label: props.selectedLabel }
+    : null);
   const [loading, setLoading] = useState(false);
   const loadRef = useRef(props.loadOptions);
 
